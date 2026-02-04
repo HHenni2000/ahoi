@@ -22,6 +22,7 @@ from openai import OpenAI
 
 from .models import Event, EventCategory, Location
 from .logging_utils import get_logger, is_debug
+from .structured_extractor import StructuredExtractor, RawEvent
 
 
 # Domains that require JavaScript rendering (Playwright)
@@ -78,6 +79,47 @@ Wichtige Regeln:
 - Datum: Verwende das aktuelle Jahr 2026 wenn kein Jahr angegeben ist"""
 
 
+# Enrichment prompt for structured events (shorter, focused on semantics)
+ENRICHMENT_SYSTEM_PROMPT = """Du bist ein Experte für familienfreundliche Events in Hamburg.
+
+Deine Aufgabe: Bewerte und kategorisiere Events für Familien mit Kindern ab 4 Jahren.
+
+KATEGORIEN:
+- theater: Theateraufführungen, Puppentheater, Musicals, Kinderoper
+- outdoor: Outdoor-Aktivitäten, Tierparkbesuche, Naturerlebnisse
+- museum: Museen, Ausstellungen, Planetarium
+- music: Konzerte, Mitmachkonzerte, Musikworkshops
+- sport: Sportevents, Tanzkurse, Bewegungsangebote
+- market: Märkte, Festivals, Stadtteilfeste
+
+Wichtige Regeln:
+- Ignoriere Events für Erwachsene (z.B. "ab 16 Jahren", Opern für Erwachsene)
+- Filtere streng: Nur Events die wirklich für Kinder ab 4 Jahren geeignet sind
+- Kategorisiere präzise nach Hauptinhalt"""
+
+ENRICHMENT_USER_PROMPT = """Bewerte und kategorisiere diese Events. Filtere NUR familienfreundliche Events (ab 4 Jahren).
+
+Quelle: {source_name}
+
+Events:
+{events_list}
+
+Antworte mit einem JSON-Array. Für jedes familienfreundliche Event:
+[
+  {{
+    "index": 0,
+    "is_family_friendly": true,
+    "category": "theater|outdoor|museum|music|sport|market",
+    "age_suitability": "4+" oder "0-3" oder "6+" oder "alle",
+    "description": "Kurze Beschreibung (max 200 Zeichen)",
+    "price_info": "8€" oder "Kostenlos" oder "Unbekannt"
+  }}
+]
+
+Wenn ein Event NICHT familienfreundlich ist, setze "is_family_friendly": false.
+Antworte NUR mit dem JSON-Array."""
+
+
 EXTRACTION_USER_PROMPT = """Extrahiere alle familienfreundlichen Veranstaltungen aus diesem Text.
 
 Quelle: {source_name}
@@ -115,10 +157,10 @@ WICHTIG zur Location:
 - "district" ist optional aber hilfreich f?r die Filterung
 
 WICHTIG zu Terminen:
-- Wenn mehrere konkrete Termine/Uhrzeiten genannt werden, erstelle EIN Event pro Termin
-- Wenn nur ein Zeitraum genannt wird (z.B. 05.02-03.03) und keine einzelnen Termine vorhanden sind, setze date_start UND date_end und behandle es als durchgehend/laufend
-- Wenn Formulierungen wie "jeden Samstag", "immer Sonntags" oder "Mo-Fr" plus Zeitraum vorkommen, erstelle Termine fuer jeden passenden Wochentag innerhalb des Zeitraums
-- Wenn der Zeitraum nur eine Laufzeit beschreibt (Ausstellung/Produktion), verwende date_end und keine kuenstliche Terminliste
+- Wenn du eine LISTE von konkreten Terminen für DASSELBE Event siehst (z.B. "Die lustige Witwe: Fr 06.Feb 19:30, Sa 07.Feb 19:30, So 08.Feb 19:00"), erstelle für JEDEN einzelnen Termin ein SEPARATES Event-Objekt mit demselben Titel
+- Beispiel: "Der Froschkönig" mit 5 Terminen → erstelle 5 separate Event-Objekte
+- Wenn nur ein Zeitraum genannt wird (z.B. 05.02-03.03) und keine einzelnen Termine vorhanden sind, setze date_start UND date_end
+- Wenn Formulierungen wie "jeden Samstag" plus Zeitraum vorkommen, erstelle Termine für jeden passenden Wochentag
 
 WICHTIG zu Links:
 - Nutze wenn m?glich den spezifischen Detail-Link zum Event (nicht die Kalender-Uebersicht)
@@ -142,7 +184,7 @@ class Extractor:
         self,
         openai_client: OpenAI,
         model: str = "gpt-4o-mini",
-        max_content_length: int = 15000,
+        max_content_length: int = 40000,  # Increased from 15000
         use_playwright: bool = False,
     ):
         """
@@ -160,6 +202,7 @@ class Extractor:
         self.force_playwright = use_playwright
         self.max_iframes = int(os.getenv("MAX_IFRAMES", "3"))
         self.logger = get_logger(__name__)
+        self.structured_extractor = StructuredExtractor()
         self.http_client = httpx.Client(
             timeout=30.0,
             follow_redirects=True,
@@ -177,11 +220,15 @@ class Extractor:
     def extract(self, url: str, source_name: str = "") -> list[Event]:
         """
         Extract events from a calendar page URL.
-        
+
+        Uses hybrid approach:
+        1. Try structured extraction (fast, captures all dates)
+        2. Fallback to LLM extraction (semantic, flexible)
+
         Args:
             url: The calendar page URL to scrape.
             source_name: Name of the source (for context).
-            
+
         Returns:
             List of extracted Event objects.
         """
@@ -200,12 +247,23 @@ class Extractor:
             if not html:
                 self.logger.warning("No HTML fetched from %s", url)
                 return []
-            
+
             expanded_html = self._expand_iframes(html, url)
+
+            # STRATEGY 1: Try structured extraction first
+            raw_events = self.structured_extractor.extract(expanded_html, url)
+            if raw_events:
+                print(f"[Extractor] Structured extraction found {len(raw_events)} events")
+                events = self._enrich_structured_events(raw_events, source_name)
+                if events:
+                    print(f"[Extractor] After filtering: {len(events)} family-friendly events")
+                    self.logger.info("Structured extraction: %s events", len(events))
+                    return events
+
+            # STRATEGY 2: Fallback to full LLM extraction
+            print(f"[Extractor] Using LLM extraction for {url}")
             markdown_content = self._html_to_markdown(expanded_html)
             link_list = self._extract_links(expanded_html, url)
-
-            # Extract events via LLM
             events = self._extract_via_llm(markdown_content, url, source_name, link_list)
 
             # Fallback: try Playwright if no events and not already using it
@@ -218,16 +276,22 @@ class Extractor:
                 html_pw = self._fetch_html_playwright(url)
                 if html_pw:
                     expanded_html = self._expand_iframes(html_pw, url)
-                    markdown_content = self._html_to_markdown(expanded_html)
-                    link_list = self._extract_links(expanded_html, url)
-                    events = self._extract_via_llm(
-                        markdown_content, url, source_name, link_list
-                    )
-            
+
+                    # Try structured first, then LLM
+                    raw_events = self.structured_extractor.extract(expanded_html, url)
+                    if raw_events:
+                        events = self._enrich_structured_events(raw_events, source_name)
+                    else:
+                        markdown_content = self._html_to_markdown(expanded_html)
+                        link_list = self._extract_links(expanded_html, url)
+                        events = self._extract_via_llm(
+                            markdown_content, url, source_name, link_list
+                        )
+
             print(f"[Extractor] Found {len(events)} events from {url}")
             self.logger.info("Found %s events from %s", len(events), url)
             return events
-            
+
         except Exception as e:
             print(f"[Extractor] Error extracting from {url}: {e}")
             self.logger.exception("Extractor error for %s", url)
@@ -493,6 +557,137 @@ class Extractor:
 
         return markdown
     
+    def _enrich_structured_events(
+        self,
+        raw_events: list[RawEvent],
+        source_name: str,
+    ) -> list[Event]:
+        """
+        Enrich structured events using LLM for semantic filtering and categorization.
+
+        Args:
+            raw_events: List of RawEvent objects from structured extraction.
+            source_name: Name of the source.
+
+        Returns:
+            List of enriched Event objects (family-friendly only).
+        """
+        if not raw_events:
+            return []
+
+        # Build compact event list for LLM
+        events_list = []
+        for i, raw in enumerate(raw_events):
+            events_list.append(
+                f"[{i}] {raw.title}\n"
+                f"    Termine: {len(raw.dates)} Aufführungen\n"
+                f"    Beschreibung: {raw.description_hint or 'Keine Beschreibung'}"
+            )
+
+        events_text = "\n\n".join(events_list)
+
+        user_prompt = ENRICHMENT_USER_PROMPT.format(
+            source_name=source_name or "Unbekannt",
+            events_list=events_text,
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": ENRICHMENT_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=4000,
+                temperature=0.1,
+            )
+
+            self._last_tokens_used = response.usage.total_tokens if response.usage else 0
+            if is_debug():
+                self.logger.debug("Enrichment tokens used: %s", self._last_tokens_used)
+
+            result = response.choices[0].message.content.strip()
+
+            # Parse enrichment response
+            enrichments = self._parse_enrichment_response(result)
+
+            # Build final events
+            events = []
+            for enrichment in enrichments:
+                idx = enrichment.get('index')
+                if idx is None or idx >= len(raw_events):
+                    continue
+
+                if not enrichment.get('is_family_friendly', False):
+                    continue
+
+                raw = raw_events[idx]
+
+                # Create one Event per date
+                for j, date in enumerate(raw.dates):
+                    link = raw.links[j] if j < len(raw.links) else raw.links[0] if raw.links else ""
+
+                    # Parse category
+                    category_str = enrichment.get('category', 'theater').lower()
+                    try:
+                        category = EventCategory(category_str)
+                    except ValueError:
+                        category = EventCategory.THEATER
+
+                    # Build location (we don't have details yet, use source name)
+                    location = Location(
+                        name=raw.location_hint or source_name or "Unbekannt",
+                        address="Unbekannt",
+                    )
+
+                    event = Event(
+                        title=raw.title,
+                        description=enrichment.get('description', raw.description_hint or "")[:500],
+                        date_start=date,
+                        date_end=None,
+                        location=location,
+                        category=category,
+                        is_indoor=True,  # Most theater events are indoor
+                        age_suitability=enrichment.get('age_suitability', '4+'),
+                        price_info=enrichment.get('price_info', 'Unbekannt'),
+                        original_link=link,
+                    )
+                    events.append(event)
+
+            self.logger.info(
+                "Enrichment: %s raw events -> %s family-friendly events",
+                len(raw_events),
+                len(events)
+            )
+            return events
+
+        except Exception as e:
+            print(f"[Extractor] Enrichment error: {e}")
+            self.logger.warning("Enrichment error: %s", e)
+            return []
+
+    def _parse_enrichment_response(self, json_str: str) -> list[dict]:
+        """Parse LLM enrichment response."""
+        # Handle markdown code blocks
+        if "```json" in json_str:
+            json_str = json_str.split("```json")[1].split("```")[0]
+        elif "```" in json_str:
+            json_str = json_str.split("```")[1].split("```")[0]
+
+        json_str = json_str.strip()
+
+        if not json_str or json_str == "[]":
+            return []
+
+        try:
+            data = json.loads(json_str)
+            if not isinstance(data, list):
+                data = [data]
+            return data
+        except json.JSONDecodeError as e:
+            self.logger.warning("Enrichment JSON parse error: %s", e)
+            return []
+
     def _extract_via_llm(
         self,
         content: str,
@@ -517,7 +712,7 @@ class Extractor:
                     {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=4000,
+                max_tokens=16000,  # Increased from 4000
                 temperature=0.1,
             )
             
