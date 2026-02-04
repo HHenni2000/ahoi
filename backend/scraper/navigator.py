@@ -42,7 +42,6 @@ PRIMARY_KEYWORDS = [
     "vorstellungen",
     "auff?hrungen",
     "auffuehrungen",
-    "tickets",
 ]
 
 SECONDARY_KEYWORDS = [
@@ -54,6 +53,12 @@ SECONDARY_KEYWORDS = [
 ]
 
 DEPRIORITY_KEYWORDS = [
+    "tickets",
+    "online-tickets",
+    "karten",
+    "kasse",
+    "shop",
+
     "st?cke",
     "stuecke",
     "st?ck",
@@ -270,7 +275,10 @@ class Navigator:
         
         # Sort by score (highest first) and return best match
         candidates.sort(key=lambda x: x[1], reverse=True)
-        return candidates[0][0]
+        best_url, best_score = candidates[0]
+        if best_score < 3:
+            return None
+        return best_url
     
     def _discover_via_llm(self, html: str, base_url: str) -> Optional[str]:
         """
@@ -312,8 +320,9 @@ Navigation HTML:
 Instructions:
 1. Prefer links that contain concrete dates or words like: Spielplan, Termine, Kalender, Vorstellungen, Auff?hrungen
 2. Avoid links that look like repertoire/overview pages (e.g., St?cke, Repertoire, Produktionen, Ensemble)
-3. Return ONLY the full URL (absolute, not relative)
-4. If you can't find a calendar URL, respond with: NONE
+3. Avoid ticket/shop pages (Tickets, Online-Tickets, Shop, Kasse)
+4. Return ONLY the full URL (absolute, not relative)
+5. If you can't find a calendar URL, respond with: NONE
 
 Calendar URL:"""
 
