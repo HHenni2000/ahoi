@@ -29,6 +29,9 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "extra": {
+      "apiBaseUrl": "http://72.60.80.95:8000"
+    },
     "plugins": [
       "expo-router"
     ],

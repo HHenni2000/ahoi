@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, StyleSheet, View } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
 import { MapPin } from 'lucide-react-native';
+import type { Region } from 'react-native-maps';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -14,6 +14,18 @@ const HAMBURG_REGION: Region = {
   latitudeDelta: 0.2,
   longitudeDelta: 0.2,
 };
+
+let MapViewComponent: typeof import('react-native-maps').default | null = null;
+let MarkerComponent: typeof import('react-native-maps').Marker | null = null;
+let mapsInitError: string | null = null;
+
+try {
+  const mapsModule = require('react-native-maps');
+  MapViewComponent = mapsModule.default ?? mapsModule;
+  MarkerComponent = mapsModule.Marker;
+} catch (error) {
+  mapsInitError = error instanceof Error ? error.message : 'Map-Modul nicht verfuegbar.';
+}
 
 export default function MapScreen() {
   const colorScheme = useColorScheme();
@@ -81,11 +93,30 @@ export default function MapScreen() {
     };
   }, [eventsWithCoords]);
 
+  if (!MapViewComponent || !MarkerComponent) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.fallback}>
+          <MapPin size={48} color={colors.textSecondary} />
+          <Text style={[styles.title, { color: colors.text }]}>
+            Kartenansicht nicht verfuegbar
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Bitte installiere `react-native-maps` und erstelle einen neuen Dev-Client.
+          </Text>
+          {mapsInitError && (
+            <Text style={[styles.note, { color: colors.textSecondary }]}>{mapsInitError}</Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <MapView style={styles.map} initialRegion={initialRegion}>
+      <MapViewComponent style={styles.map} initialRegion={initialRegion}>
         {eventsWithCoords.map((event) => (
-          <Marker
+          <MarkerComponent
             key={event.id}
             coordinate={{
               latitude: event.location.lat as number,
@@ -95,7 +126,7 @@ export default function MapScreen() {
             description={event.location.name}
           />
         ))}
-      </MapView>
+      </MapViewComponent>
 
       {loading && (
         <View style={[styles.overlay, { backgroundColor: overlayBackground }]}>
@@ -130,6 +161,13 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  fallback: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 8,
   },
   overlay: {
     position: 'absolute',

@@ -54,8 +54,16 @@ API läuft dann auf: http://localhost:8000
 ```bash
 cd app
 npm install
+
+# Optional: API Base URL (defaults to VPS in app/app.json)
+# Windows (PowerShell): $env:EXPO_PUBLIC_API_BASE_URL="http://72.60.80.95:8000"
+# macOS/Linux: EXPO_PUBLIC_API_BASE_URL="http://72.60.80.95:8000" npx expo start
 npx expo start
 ```
+
+Hinweise:
+- Die API-URL kann alternativ in `app/app.json` unter `expo.extra.apiBaseUrl` gesetzt werden.
+- FÃ¼r die Kartenansicht auf Android wird ein Google Maps API Key benÃ¶tigt (`android.config.googleMaps.apiKey` in `app/app.json`).
 
 ## Dokumentation
 

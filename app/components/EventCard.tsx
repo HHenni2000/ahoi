@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Linking } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import {
   Drama,
   TreePine,
@@ -57,9 +58,28 @@ export function EventCard({ event }: EventCardProps) {
     }).format(date);
   };
 
-  const handlePress = () => {
-    if (event.originalLink) {
-      Linking.openURL(event.originalLink);
+  const normalizeUrl = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
+  };
+
+  const handlePress = async () => {
+    if (!event.originalLink) return;
+    const url = normalizeUrl(event.originalLink);
+    if (!url) return;
+
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert('Link konnte nicht geoeffnet werden', url);
+      }
     }
   };
 
