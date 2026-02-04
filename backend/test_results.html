@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ahoi - Scraper Test-Ergebnisse</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 2rem;
+        }
+        header h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+        header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .stat-card .number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-card .label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .events-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        .event-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .event-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        .event-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            flex: 1;
+        }
+        .category-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 0.5rem;
+            flex-shrink: 0;
+        }
+        .category-theater { background: #fce4ec; color: #c2185b; }
+        .category-music { background: #e3f2fd; color: #1565c0; }
+        .category-museum { background: #fff3e0; color: #ef6c00; }
+        .category-outdoor { background: #e8f5e9; color: #2e7d32; }
+        .category-sport { background: #f3e5f5; color: #7b1fa2; }
+        .category-market { background: #fff8e1; color: #f9a825; }
+        
+        .event-description {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+        .event-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+        }
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #555;
+        }
+        .meta-item .icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+        .source-tag {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+            font-size: 0.8rem;
+            color: #999;
+        }
+        .price-free {
+            color: #2e7d32;
+            font-weight: 600;
+        }
+        .price-paid {
+            color: #1565c0;
+            font-weight: 600;
+        }
+        .age-badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 3rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ahoi</h1>
+            <p>Scraper Test-Ergebnisse vom 04.02.2026</p>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="number">12</div>
+                <div class="label">Events gefunden</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">4</div>
+                <div class="label">Quellen getestet</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">7.373</div>
+                <div class="label">Tokens verwendet</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">~$0.01</div>
+                <div class="label">Geschätzte Kosten</div>
+            </div>
+        </div>
+
+        <div class="events-grid">
+            <!-- Bücherhallen Events -->
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Buch-Bingo mit Gewinnpreis</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein spannendes Bingo-Spiel für Kinder mit tollen Preisen.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 04.02.2026, 16:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> Bücherhalle Steilshoop</div>
+                    <div class="meta-item"><span class="price-free">Kostenlos</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Bücherhallen Hamburg</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Make the friendship bracelets</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein kreativer Workshop, in dem Kinder Freundschaftsarmbänder gestalten können.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 04.02.2026, 14:30</div>
+                    <div class="meta-item"><span class="icon">📍</span> Bücherhalle Alstertal</div>
+                    <div class="meta-item"><span class="price-free">Kostenlos</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Bücherhallen Hamburg</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Bilderbuchkino – jeden Mittwoch</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein Bilderbuchkino für Kinder mit wechselnden Geschichten.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 04.02.2026, 16:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> Bücherhalle Bramfeld</div>
+                    <div class="meta-item"><span class="price-free">Kostenlos</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Bücherhallen Hamburg</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Bilderbuchkino</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein Bilderbuchkino für Kinder mit spannenden Geschichten.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 04.02.2026, 16:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> Bücherhalle Neugraben</div>
+                    <div class="meta-item"><span class="price-free">Kostenlos</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Bücherhallen Hamburg</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Bilderbuchkino: Der Wolf kommt nicht</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein Bilderbuchkino für Kinder mit der Geschichte 'Der Wolf kommt nicht'.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 04.02.2026, 16:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> Bücherhalle Winterhude</div>
+                    <div class="meta-item"><span class="price-free">Kostenlos</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Bücherhallen Hamburg</div>
+            </div>
+
+            <!-- Kindertheater Wackelzahn Events -->
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Rumpelstilzchen</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Das beliebte Märchen der Gebrüder Grimm – neu erzählt und voller Musik! Eine mitreißende Inszenierung von Jan Radermacher.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 30.01. - 22.03.2026</div>
+                    <div class="meta-item"><span class="icon">📍</span> Kindertheater Wackelzahn</div>
+                    <div class="meta-item"><span class="price-paid">8€</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Kindertheater Wackelzahn</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Aschenputtel</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein Märchen nach den Gebrüdern Grimm mit viel Musik von Jan Radermacher. Eine Inszenierung voller Witz und Abenteuer.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 27.03. - 25.05.2026</div>
+                    <div class="meta-item"><span class="icon">📍</span> Kindertheater Wackelzahn</div>
+                    <div class="meta-item"><span class="price-paid">8€</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Kindertheater Wackelzahn</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Artus hat Angst</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein Theaterstück für Kitagruppen zum Umgang mit Angst von und mit Leif Scheele. Artus lernt, mit seiner Angst umzugehen.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 02.02. - 27.02.2026</div>
+                    <div class="meta-item"><span class="icon">📍</span> Kindertheater Wackelzahn</div>
+                    <div class="meta-item"><span class="price-paid">8€</span></div>
+                    <div class="meta-item"><span class="age-badge">3+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Kindertheater Wackelzahn</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Ich wehr mich</div>
+                    <span class="category-badge category-theater">Theater</span>
+                </div>
+                <p class="event-description">Ein Präventionsstück für Vorschul- und Schulgruppen zum Thema Mobbing. Es zeigt, wie man sich wehren und helfen kann.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 13.04. - 22.05.2026</div>
+                    <div class="meta-item"><span class="icon">📍</span> Kindertheater Wackelzahn</div>
+                    <div class="meta-item"><span class="price-paid">8€</span></div>
+                    <div class="meta-item"><span class="age-badge">5+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Kindertheater Wackelzahn</div>
+            </div>
+
+            <!-- MK&G Events -->
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Kunst erleben – Schritt für Schritt</div>
+                    <span class="category-badge category-museum">Museum</span>
+                </div>
+                <p class="event-description">Offener Kreativ-Workshop für Kinder und Familien.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 06.02.2026, 14:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> MK&G Hamburg</div>
+                    <div class="meta-item"><span class="price-paid">Preis unbekannt</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Museum für Kunst und Gewerbe</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">GEDOK Jubiläumskonzert</div>
+                    <span class="category-badge category-music">Musik</span>
+                </div>
+                <p class="event-description">Konzert für die ganze Familie.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 07.02.2026, 18:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> MK&G Hamburg</div>
+                    <div class="meta-item"><span class="price-paid">Preis unbekannt</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Museum für Kunst und Gewerbe</div>
+            </div>
+
+            <div class="event-card">
+                <div class="event-header">
+                    <div class="event-title">Auf den Spuren der Jahreszeiten</div>
+                    <span class="category-badge category-museum">Museum</span>
+                </div>
+                <p class="event-description">Ein japanischer Motivschatz – Führung für Kinder und Familien.</p>
+                <div class="event-meta">
+                    <div class="meta-item"><span class="icon">📅</span> 12.02.2026, 18:00</div>
+                    <div class="meta-item"><span class="icon">📍</span> MK&G Hamburg</div>
+                    <div class="meta-item"><span class="price-paid">Preis unbekannt</span></div>
+                    <div class="meta-item"><span class="age-badge">4+</span></div>
+                </div>
+                <div class="source-tag">Quelle: Museum für Kunst und Gewerbe</div>
+            </div>
+        </div>
+
+        <footer>
+            <p>ahoi Scraper Test | Model: gpt-4o-mini | Powered by OpenAI</p>
+        </footer>
+    </div>
+</body>
+</html>

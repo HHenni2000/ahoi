@@ -1,0 +1,27 @@
+# ahoi Backend - Dependencies
+# Python 3.11+
+
+# Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Web Scraping
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+markdownify>=0.12.0
+
+# AI/LLM
+openai>=1.12.0
+
+# Data Validation
+pydantic>=2.6.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# HTTP
+httpx>=0.26.0
+
+# Utilities
+python-dateutil>=2.8.0
