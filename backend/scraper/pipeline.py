@@ -18,6 +18,7 @@ from .models import Source, Event, ScrapingResult, SourceStatus
 from .navigator import Navigator
 from .extractor import Extractor
 from .deduplicator import Deduplicator
+from .geocoder import Geocoder
 
 
 class ScrapingPipeline:
@@ -36,6 +37,7 @@ class ScrapingPipeline:
         model: str = "gpt-4o-mini",
         existing_hashes: Optional[list[str]] = None,
         use_playwright: bool = False,
+        enable_geocoding: Optional[bool] = None,
     ):
         """
         Initialize the scraping pipeline.
@@ -57,6 +59,7 @@ class ScrapingPipeline:
             use_playwright=use_playwright,
         )
         self.deduplicator = Deduplicator()
+        self.geocoder = Geocoder(enabled=enable_geocoding)
 
         if existing_hashes:
             self.deduplicator.add_existing_hashes(existing_hashes)
@@ -120,6 +123,11 @@ class ScrapingPipeline:
             # Set source_id on all new events
             for event in new_events:
                 event.source_id = source.id
+
+            # Enrich events with geocoding (best-effort)
+            geocoded = self.geocoder.enrich_events(new_events)
+            if geocoded:
+                print(f"[Pipeline] Geocoded {geocoded} events")
             
             result.events_new = len(new_events)
             result.events_updated = 0  # TODO: Implement update detection
@@ -152,6 +160,7 @@ class ScrapingPipeline:
         """Cleanup resources (Navigator and Extractor)."""
         self.navigator.close()
         self.extractor.close()
+        self.geocoder.close()
 
     def __enter__(self):
         """Context manager entry."""

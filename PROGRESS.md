@@ -10,7 +10,7 @@ Letzte Aktualisierung: 2026-02-04
 |-------|-------------|--------|
 | Phase 1 | Lokales Scraping-Prototyping | ✅ ABGESCHLOSSEN |
 | Phase 2 | Backend API Setup (VPS) | 🔄 95% - API läuft, Cron fehlt |
-| Phase 3 | Expo Frontend | 🔄 50% - UI fertig, Backend-Integration fehlt |
+| Phase 3 | Expo Frontend | ?? 85% - Backend-Integration & Map fertig |
 | Phase 4 | Testing & Polish | ⏳ Ausstehend |
 
 ---
@@ -106,17 +106,17 @@ Letzte Aktualisierung: 2026-02-04
 - [x] Farbschema definieren (constants/Colors.ts)
 
 ### 3.2 Screens
-- [x] Feed Screen (index.tsx) mit Mock-Daten
+- [x] Feed Screen (index.tsx) mit Backend-Daten
 - [x] Filter-Chips (Datum, Kategorie)
 - [x] EventCard Komponente
-- [x] Map Screen (Placeholder)
-- [x] Sources Screen mit Mock-Daten
-- [ ] API Client für Backend
-- [ ] Events vom Backend laden
-- [ ] Pull-to-refresh mit echten Daten
+- [x] Map Screen (react-native-maps)
+- [x] Sources Screen mit Backend-Daten
+- [x] API Client f?r Backend
+- [x] Events vom Backend laden
+- [x] Pull-to-refresh mit echten Daten
 
 ### 3.3 Ausstehend
-- [ ] react-native-maps Integration
+- [x] react-native-maps Integration (install + native setup n?tig)
 - [ ] Push Notifications (optional)
 
 ---

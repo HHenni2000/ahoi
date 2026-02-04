@@ -1,71 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 
 import { EventCard } from '@/components/EventCard';
 import { Event, EventCategory } from '@/types/event';
 import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-
-// Mock data for demonstration
-const MOCK_EVENTS: Event[] = [
-  {
-    id: '1',
-    sourceId: 'buecherhallen',
-    title: 'Bilderbuchkino - jeden Mittwoch ein neues Abenteuer!',
-    description: 'Spannende Geschichten auf der grossen Leinwand mit anschliessendem Basteln.',
-    dateStart: new Date('2026-02-04T16:00:00'),
-    location: { name: 'Buecherhalle Bramfeld', address: 'Herthastrasse 18', district: 'Bramfeld' },
-    category: 'theater',
-    isIndoor: true,
-    ageSuitability: '4+',
-    priceInfo: 'Kostenlos',
-    originalLink: 'https://www.buecherhallen.de/',
-    region: 'hamburg',
-  },
-  {
-    id: '2',
-    sourceId: 'hagenbeck',
-    title: 'Ferienprogramm im Tierpark',
-    description: 'Entdecke die Tierwelt hautnah mit unseren Tierpflegern.',
-    dateStart: new Date('2026-02-15T10:00:00'),
-    location: { name: 'Tierpark Hagenbeck', address: 'Lokstedter Grenzstrasse 2', district: 'Stellingen' },
-    category: 'outdoor',
-    isIndoor: false,
-    ageSuitability: '4+',
-    priceInfo: '15 EUR',
-    originalLink: 'https://www.hagenbeck.de/',
-    region: 'hamburg',
-  },
-  {
-    id: '3',
-    sourceId: 'mkg',
-    title: 'Kunst erleben - Schritt fuer Schritt',
-    description: 'Kinderfuehrung durch die aktuelle Ausstellung.',
-    dateStart: new Date('2026-02-06T14:00:00'),
-    location: { name: 'Museum fuer Kunst und Gewerbe', address: 'Steintorplatz', district: 'St. Georg' },
-    category: 'museum',
-    isIndoor: true,
-    ageSuitability: '6+',
-    priceInfo: 'Kostenlos',
-    originalLink: 'https://www.mkg-hamburg.de/',
-    region: 'hamburg',
-  },
-  {
-    id: '4',
-    sourceId: 'fundus',
-    title: 'Die kleine Meerjungfrau',
-    description: 'Bezauberndes Puppentheater nach Hans Christian Andersen.',
-    dateStart: new Date('2026-02-15T15:00:00'),
-    location: { name: 'Fundus Theater', address: 'Hasselbrookstrasse 25', district: 'Eilbek' },
-    category: 'theater',
-    isIndoor: true,
-    ageSuitability: '4+',
-    priceInfo: '8 EUR',
-    originalLink: 'https://www.fundus-theater.de/',
-    region: 'hamburg',
-  },
-];
+import { fetchEvents } from '@/lib/api';
 
 type DateFilter = 'all' | 'today' | 'weekend' | 'week';
 
@@ -86,27 +35,88 @@ const CATEGORY_FILTERS: { key: EventCategory | 'all'; label: string }[] = [
   { key: 'market', label: 'Markt' },
 ];
 
+const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const endOfDay = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+const addDays = (date: Date, amount: number) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
+
+const getDateRange = (filter: DateFilter) => {
+  const now = new Date();
+
+  if (filter === 'today') {
+    return { fromDate: startOfDay(now), toDate: endOfDay(now) };
+  }
+
+  if (filter === 'week') {
+    const day = now.getDay();
+    const daysUntilSunday = (7 - day) % 7;
+    return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, daysUntilSunday)) };
+  }
+
+  if (filter === 'weekend') {
+    const day = now.getDay();
+    if (day === 0) {
+      return { fromDate: startOfDay(addDays(now, -1)), toDate: endOfDay(now) };
+    }
+    if (day === 6) {
+      return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, 1)) };
+    }
+    const daysUntilSaturday = (6 - day + 7) % 7;
+    const saturday = addDays(now, daysUntilSaturday);
+    return { fromDate: startOfDay(saturday), toDate: endOfDay(addDays(saturday, 1)) };
+  }
+
+  return { fromDate: undefined, toDate: undefined };
+};
+
 export default function FeedScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
+  const [events, setEvents] = useState<Event[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<EventCategory | 'all'>('all');
 
-  // Filter events
-  const filteredEvents = MOCK_EVENTS.filter((event) => {
-    if (categoryFilter !== 'all' && event.category !== categoryFilter) {
-      return false;
-    }
-    return true;
-  });
+  const loadEvents = useCallback(
+    async (showSpinner = false) => {
+      if (showSpinner) {
+        setLoading(true);
+      }
+      setErrorMessage(null);
+
+      try {
+        const { fromDate, toDate } = getDateRange(dateFilter);
+        const data = await fetchEvents({
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+          fromDate: fromDate ? fromDate.toISOString() : undefined,
+          toDate: toDate ? toDate.toISOString() : undefined,
+        });
+        setEvents(data);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Events konnten nicht geladen werden.';
+        setErrorMessage(message);
+      } finally {
+        setRefreshing(false);
+        if (showSpinner) {
+          setLoading(false);
+        }
+      }
+    },
+    [categoryFilter, dateFilter]
+  );
+
+  useEffect(() => {
+    loadEvents(true);
+  }, [loadEvents]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // TODO: Fetch events from Firebase
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    await loadEvents();
   };
 
   const renderFilterChip = (
@@ -180,7 +190,7 @@ export default function FeedScreen() {
 
       {/* Event List */}
       <FlashList
-        data={filteredEvents}
+        data={events}
         renderItem={({ item }) => <EventCard event={item} />}
         estimatedItemSize={200}
         refreshControl={
@@ -192,9 +202,20 @@ export default function FeedScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Keine Events gefunden
-            </Text>
+            {loading ? (
+              <ActivityIndicator size="large" color={colors.tint} />
+            ) : (
+              <>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  Keine Events gefunden
+                </Text>
+                {errorMessage && (
+                  <Text style={[styles.errorText, { color: colors.error }]}>
+                    {errorMessage}
+                  </Text>
+                )}
+              </>
+            )}
           </View>
         }
         contentContainerStyle={styles.listContent}
@@ -236,5 +257,10 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
