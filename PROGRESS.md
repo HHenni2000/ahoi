@@ -8,10 +8,10 @@ Letzte Aktualisierung: 2026-02-04
 
 | Phase | Beschreibung | Status |
 |-------|-------------|--------|
-| Phase 1 | Lokales Scraping-Prototyping | ABGESCHLOSSEN |
-| Phase 2 | Backend API Setup (VPS) | IN ARBEIT |
-| Phase 3 | Expo Frontend | IN ARBEIT |
-| Phase 4 | Testing & Polish | Ausstehend |
+| Phase 1 | Lokales Scraping-Prototyping | ✅ ABGESCHLOSSEN |
+| Phase 2 | Backend API Setup (VPS) | 🔄 95% - API läuft, Cron fehlt |
+| Phase 3 | Expo Frontend | 🔄 50% - UI fertig, Backend-Integration fehlt |
+| Phase 4 | Testing & Polish | ⏳ Ausstehend |
 
 ---
 
@@ -75,13 +75,22 @@ Letzte Aktualisierung: 2026-02-04
 - [x] SETUP.md mit VPS-Deployment-Anleitung
 - [x] requirements.txt aktualisiert (FastAPI, uvicorn)
 
-### 2.4 Deployment (Deine Aufgaben)
-- [ ] VPS vorbereiten (Python 3.11+, venv)
-- [ ] Code auf VPS deployen
-- [ ] .env mit OPENAI_API_KEY konfigurieren
-- [ ] Systemd Service einrichten
-- [ ] Cron Jobs einrichten
-- [ ] Optional: Nginx Reverse Proxy
+### 2.4 GitHub & Deployment
+- [x] GitHub Repository erstellen (HHenni2000/ahoi)
+- [x] .gitignore und README.md
+- [x] Initial commit und push
+
+### 2.5 VPS Deployment
+- [x] VPS vorbereitet (Python 3.12.3)
+- [x] Code auf VPS deployed (git clone)
+- [x] Virtual Environment und Dependencies installiert
+- [x] .env mit OPENAI_API_KEY konfiguriert
+- [x] PM2 Process Manager eingerichtet (start.py)
+- [x] API läuft und ist von außen erreichbar (http://72.60.80.95:8000)
+- [x] Firewall konfiguriert (Port 8000 offen)
+- [ ] Cron Jobs einrichten (scrape_all.py, cleanup.py)
+- [ ] Erste Event-Quelle hinzufügen und testen
+- [ ] Optional: Nginx Reverse Proxy für HTTPS
 
 ---
 
@@ -138,3 +147,12 @@ Folgende Domains benötigen Playwright für JavaScript-Rendering:
 
 Playwright wird automatisch aktiviert wenn eine URL diese Domains enthält.
 Kann auch manuell erzwungen werden via `use_playwright=True`.
+
+### VPS Deployment-Erkenntnisse (2026-02-04)
+- **VPS Setup:** Python 3.12.3 bereits vorhanden (kein PPA nötig)
+- **Process Manager:** PM2 statt Systemd - einfacher für bestehende PM2-Infrastruktur
+- **PM2 Python-Problem:** PM2 kann Python-Binaries nicht direkt starten → Lösung: `start.py` Wrapper-Script
+- **Port-Konflikt:** Alte Prozesse mit `fuser -k 8000/tcp` killen
+- **Firewall:** UFW Port 8000 öffnen mit `ufw allow 8000/tcp`
+- **API läuft:** http://72.60.80.95:8000/api/health erfolgreich von außen erreichbar
+- **Nächste Schritte:** Cron Jobs für automatisches Scraping, erste Event-Quelle testen
