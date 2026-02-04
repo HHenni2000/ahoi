@@ -11,6 +11,7 @@ Strategy:
 """
 
 import json
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -156,6 +157,7 @@ class Extractor:
         self.model = model
         self.max_content_length = max_content_length
         self.force_playwright = use_playwright
+        self.max_iframes = int(os.getenv("MAX_IFRAMES", "3"))
         self.http_client = httpx.Client(
             timeout=30.0,
             follow_redirects=True,
@@ -187,11 +189,27 @@ class Extractor:
             if not html:
                 return []
             
-            markdown_content = self._html_to_markdown(html)
-            link_list = self._extract_links(html, url)
+            expanded_html = self._expand_iframes(html, url)
+            markdown_content = self._html_to_markdown(expanded_html)
+            link_list = self._extract_links(expanded_html, url)
 
             # Extract events via LLM
             events = self._extract_via_llm(markdown_content, url, source_name, link_list)
+
+            # Fallback: try Playwright if no events and not already using it
+            if (
+                not events
+                and not self.force_playwright
+                and not _needs_playwright(url)
+            ):
+                html_pw = self._fetch_html_playwright(url)
+                if html_pw:
+                    expanded_html = self._expand_iframes(html_pw, url)
+                    markdown_content = self._html_to_markdown(expanded_html)
+                    link_list = self._extract_links(expanded_html, url)
+                    events = self._extract_via_llm(
+                        markdown_content, url, source_name, link_list
+                    )
             
             print(f"[Extractor] Found {len(events)} events from {url}")
             return events
@@ -270,6 +288,61 @@ class Extractor:
         except Exception as e:
             print(f"[Extractor] Failed to fetch {url} via Playwright: {e}")
             return None
+
+    def _absolutize_links(self, html: str, base_url: str) -> str:
+        """Convert relative href/src values to absolute URLs."""
+        from urllib.parse import urljoin
+
+        soup = BeautifulSoup(html, "lxml")
+        for tag in soup.find_all(href=True):
+            href = tag.get("href")
+            if href:
+                tag["href"] = urljoin(base_url, href)
+
+        for tag in soup.find_all(src=True):
+            src = tag.get("src")
+            if src:
+                tag["src"] = urljoin(base_url, src)
+
+        return str(soup)
+
+    def _expand_iframes(self, html: str, base_url: str) -> str:
+        """Inline iframe HTML (best-effort) so embedded schedules are visible."""
+        from urllib.parse import urljoin
+
+        soup = BeautifulSoup(html, "lxml")
+        iframes = soup.find_all("iframe", src=True)
+        if not iframes:
+            return html
+
+        appended = []
+        seen = set()
+
+        for iframe in iframes:
+            src = (iframe.get("src") or "").strip()
+            if not src or src.startswith(("javascript:", "about:", "#")):
+                continue
+
+            iframe_url = urljoin(base_url, src)
+            if iframe_url in seen:
+                continue
+            seen.add(iframe_url)
+
+            iframe_html = self._fetch_html_httpx(iframe_url)
+            if iframe_html is None:
+                iframe_html = self._fetch_html_playwright(iframe_url)
+
+            if iframe_html:
+                iframe_html = self._absolutize_links(iframe_html, iframe_url)
+                appended.append(f"\n<!-- iframe:{iframe_url} -->\n{iframe_html}\n<!-- /iframe -->\n")
+
+            if len(appended) >= self.max_iframes:
+                break
+
+        if not appended:
+            return html
+
+        return html + "\n" + "\n".join(appended)
     
     def _html_to_markdown(self, html: str) -> str:
         """
