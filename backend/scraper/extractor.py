@@ -329,6 +329,61 @@ class Extractor:
 
         return str(soup)
 
+    def _extract_google_sheet_text(self, iframe_url: str) -> Optional[str]:
+        """Best-effort extraction of Google Sheets data as plain text."""
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+        parsed = urlparse(iframe_url)
+        if "docs.google.com" not in parsed.netloc or "/spreadsheets/" not in parsed.path:
+            return None
+
+        query = parse_qs(parsed.query)
+        gid = query.get("gid", ["0"])[0]
+
+        candidates: list[str] = []
+
+        if "pubhtml" in parsed.path:
+            csv_path = parsed.path.replace("pubhtml", "pub")
+            csv_query = {"output": "csv", "gid": gid}
+            candidates.append(urlunparse(parsed._replace(path=csv_path, query=urlencode(csv_query))))
+
+            gviz_query = {"tqx": "out:csv", "gid": gid}
+            candidates.append(urlunparse(parsed._replace(path=parsed.path.replace("pubhtml", "gviz/tq"), query=urlencode(gviz_query))))
+
+        # Fallback to original URL (HTML table)
+        candidates.append(iframe_url)
+
+        for candidate in candidates:
+            if is_debug():
+                self.logger.debug("Trying Google Sheets extract: %s", candidate)
+            html_or_csv = self._fetch_html_httpx(candidate)
+            if not html_or_csv:
+                continue
+
+            if candidate.endswith("output=csv") or "tqx=out%3Acsv" in candidate or "tqx=out:csv" in candidate:
+                lines = [line.strip() for line in html_or_csv.splitlines() if line.strip()]
+                if lines:
+                    return "\n".join(lines[:200])
+
+            # Try to parse HTML table
+            soup = BeautifulSoup(html_or_csv, "lxml")
+            table = soup.find("table")
+            if not table:
+                continue
+
+            rows = []
+            for row in table.find_all("tr"):
+                cells = [cell.get_text(" ", strip=True) for cell in row.find_all(["td", "th"])]
+                if cells:
+                    rows.append(" | ".join(cells))
+                if len(rows) >= 200:
+                    break
+
+            if rows:
+                return "\n".join(rows)
+
+        return None
+
     def _expand_iframes(self, html: str, base_url: str) -> str:
         """Inline iframe HTML (best-effort) so embedded schedules are visible."""
         from urllib.parse import urljoin
@@ -351,8 +406,26 @@ class Extractor:
                 continue
             seen.add(iframe_url)
 
+            if "openstreetmap.org" in iframe_url:
+                if is_debug():
+                    self.logger.debug("Skipping map iframe: %s", iframe_url)
+                continue
+
             if is_debug():
                 self.logger.debug("Fetching iframe: %s", iframe_url)
+            iframe_html = None
+
+            sheet_text = self._extract_google_sheet_text(iframe_url)
+            if sheet_text:
+                appended.append(
+                    f"\n<!-- iframe:{iframe_url} (sheet) -->\n{sheet_text}\n<!-- /iframe -->\n"
+                )
+                if is_debug():
+                    self.logger.debug("Extracted Google Sheet text (%s chars)", len(sheet_text))
+                if len(appended) >= self.max_iframes:
+                    break
+                continue
+
             iframe_html = self._fetch_html_httpx(iframe_url)
             if iframe_html is None:
                 iframe_html = self._fetch_html_playwright(iframe_url)
