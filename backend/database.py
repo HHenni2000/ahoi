@@ -283,11 +283,13 @@ def get_events(
         query += " AND category = ?"
         params.append(category)
 
-    if from_date:
-        query += " AND date_start >= ?"
+    if from_date and to_date:
+        query += " AND date_start <= ? AND COALESCE(date_end, date_start) >= ?"
+        params.extend([to_date, from_date])
+    elif from_date:
+        query += " AND COALESCE(date_end, date_start) >= ?"
         params.append(from_date)
-
-    if to_date:
+    elif to_date:
         query += " AND date_start <= ?"
         params.append(to_date)
 

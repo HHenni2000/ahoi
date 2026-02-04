@@ -112,6 +112,12 @@ WICHTIG zur Location:
 - Suche im Text nach Stra?ennamen, PLZ (20xxx f?r Hamburg), Stadtteilen
 - "district" ist optional aber hilfreich f?r die Filterung
 
+WICHTIG zu Terminen:
+- Wenn mehrere konkrete Termine/Uhrzeiten genannt werden, erstelle EIN Event pro Termin
+- Wenn nur ein Zeitraum genannt wird (z.B. 05.02-03.03) und keine einzelnen Termine vorhanden sind, setze date_start UND date_end und behandle es als durchgehend/laufend
+- Wenn Formulierungen wie "jeden Samstag", "immer Sonntags" oder "Mo-Fr" plus Zeitraum vorkommen, erstelle Termine fuer jeden passenden Wochentag innerhalb des Zeitraums
+- Wenn der Zeitraum nur eine Laufzeit beschreibt (Ausstellung/Produktion), verwende date_end und keine kuenstliche Terminliste
+
 WICHTIG zu Links:
 - Nutze wenn m?glich den spezifischen Detail-Link zum Event (nicht die Kalender-Uebersicht)
 - Verwende dafuer die Linkliste oder Links im Text

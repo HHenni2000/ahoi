@@ -35,17 +35,37 @@ def _needs_playwright(url: str) -> bool:
 
 
 # Keywords that indicate a calendar/event page (German-focused)
-CALENDAR_KEYWORDS = [
+PRIMARY_KEYWORDS = [
     "spielplan",
-    "programm", 
-    "kalender",
     "termine",
+    "kalender",
+    "vorstellungen",
+    "auff?hrungen",
+    "auffuehrungen",
+    "tickets",
+]
+
+SECONDARY_KEYWORDS = [
+    "programm",
     "veranstaltungen",
     "events",
-    "vorstellungen",
-    "aufführungen",
-    "aktuell",
-    "kommende",
+    "eventkalender",
+    "terminkalender",
+]
+
+DEPRIORITY_KEYWORDS = [
+    "st?cke",
+    "stuecke",
+    "st?ck",
+    "stueck",
+    "repertoire",
+    "produktionen",
+    "produktion",
+    "inszenierungen",
+    "ensemble",
+    "spielzeit",
+    "aktuelles",
+    "aktuelle st?cke",
 ]
 
 
@@ -197,7 +217,7 @@ class Navigator:
         
         # Build regex pattern from keywords
         pattern = re.compile(
-            "|".join(CALENDAR_KEYWORDS),
+            "|".join(PRIMARY_KEYWORDS + SECONDARY_KEYWORDS),
             re.IGNORECASE
         )
         
@@ -216,14 +236,29 @@ class Navigator:
             
             # Check href for keywords
             href_lower = href.lower()
-            for keyword in CALENDAR_KEYWORDS:
+            for keyword in PRIMARY_KEYWORDS:
                 if keyword in href_lower:
-                    score += 2  # Higher weight for URL matches
+                    score += 4  # Strong signal in URL
+
+            for keyword in SECONDARY_KEYWORDS:
+                if keyword in href_lower:
+                    score += 2
             
             # Check link text for keywords
-            for keyword in CALENDAR_KEYWORDS:
+            for keyword in PRIMARY_KEYWORDS:
+                if keyword in text:
+                    score += 3
+
+            for keyword in SECONDARY_KEYWORDS:
                 if keyword in text:
                     score += 1
+
+            # Penalize overview/repertoire links
+            for keyword in DEPRIORITY_KEYWORDS:
+                if keyword in href_lower:
+                    score -= 3
+                if keyword in text:
+                    score -= 2
             
             if score > 0:
                 # Convert relative URL to absolute
@@ -267,7 +302,7 @@ class Navigator:
         if len(nav_html) > 8000:
             nav_html = nav_html[:8000] + "..."
         
-        prompt = f"""Analyze this website's navigation HTML and identify the URL that leads to the event calendar, program, or schedule page.
+        prompt = f"""Analyze this website's navigation HTML and identify the URL that leads to the event calendar, schedule, or specific performance dates page.
 
 Base URL: {base_url}
 
@@ -275,9 +310,10 @@ Navigation HTML:
 {nav_html}
 
 Instructions:
-1. Look for links containing words like: Spielplan, Programm, Kalender, Termine, Veranstaltungen, Events
-2. Return ONLY the full URL (absolute, not relative)
-3. If you can't find a calendar URL, respond with: NONE
+1. Prefer links that contain concrete dates or words like: Spielplan, Termine, Kalender, Vorstellungen, Auff?hrungen
+2. Avoid links that look like repertoire/overview pages (e.g., St?cke, Repertoire, Produktionen, Ensemble)
+3. Return ONLY the full URL (absolute, not relative)
+4. If you can't find a calendar URL, respond with: NONE
 
 Calendar URL:"""
 
