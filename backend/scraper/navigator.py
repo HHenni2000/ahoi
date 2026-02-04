@@ -19,6 +19,7 @@ import httpx
 from openai import OpenAI
 
 from .models import Source
+from .logging_utils import get_logger, is_debug
 
 
 # Domains that require JavaScript rendering (Playwright)
@@ -101,6 +102,7 @@ class Navigator:
         self.client = openai_client
         self.model = model
         self.force_playwright = use_playwright
+        self.logger = get_logger(__name__)
         self.http_client = httpx.Client(
             timeout=30.0,
             follow_redirects=True,
@@ -123,12 +125,14 @@ class Navigator:
             # Fetch the root page
             html = self._fetch_html(source.input_url)
             if not html:
+                self.logger.warning("No HTML fetched for %s", source.input_url)
                 return None
             
             # Attempt A: Regex-based discovery
             target_url = self._discover_via_regex(html, source.input_url)
             if target_url:
                 print(f"[Navigator] Found via regex: {target_url}")
+                self.logger.info("Navigator regex selected: %s", target_url)
                 return target_url
             
             # Attempt B: LLM fallback
@@ -136,13 +140,16 @@ class Navigator:
                 target_url = self._discover_via_llm(html, source.input_url)
                 if target_url:
                     print(f"[Navigator] Found via LLM: {target_url}")
+                    self.logger.info("Navigator LLM selected: %s", target_url)
                     return target_url
             
             print(f"[Navigator] No calendar URL found for {source.input_url}")
+            self.logger.warning("No calendar URL found for %s", source.input_url)
             return None
             
         except Exception as e:
             print(f"[Navigator] Error discovering URL: {e}")
+            self.logger.exception("Navigator error for %s", source.input_url)
             return None
     
     def _fetch_html(self, url: str) -> Optional[str]:
@@ -169,9 +176,12 @@ class Navigator:
         try:
             response = self.http_client.get(url)
             response.raise_for_status()
+            if is_debug():
+                self.logger.debug("Fetched %s via httpx (%s bytes)", url, len(response.text))
             return response.text
         except Exception as e:
             print(f"[Navigator] Failed to fetch {url} via httpx: {e}")
+            self.logger.warning("httpx failed for %s: %s", url, e)
             return None
 
     def _fetch_html_playwright(self, url: str) -> Optional[str]:
@@ -202,14 +212,19 @@ class Navigator:
 
         try:
             print(f"[Navigator] Using Playwright for {url}")
+            if is_debug():
+                self.logger.debug("Using Playwright for %s", url)
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(_fetch_in_thread)
                 html = future.result(timeout=60)
+                if html and is_debug():
+                    self.logger.debug("Fetched %s via Playwright (%s bytes)", url, len(html))
                 return html
 
         except Exception as e:
             print(f"[Navigator] Failed to fetch {url} via Playwright: {e}")
+            self.logger.warning("Playwright failed for %s: %s", url, e)
             return None
     
     def _discover_via_regex(self, html: str, base_url: str) -> Optional[str]:
@@ -276,7 +291,11 @@ class Navigator:
         # Sort by score (highest first) and return best match
         candidates.sort(key=lambda x: x[1], reverse=True)
         best_url, best_score = candidates[0]
+        if is_debug():
+            self.logger.debug("Top candidates: %s", candidates[:5])
         if best_score < 3:
+            if is_debug():
+                self.logger.debug("Best score below threshold: %s", best_score)
             return None
         return best_url
     

@@ -21,6 +21,7 @@ from markdownify import markdownify as md
 from openai import OpenAI
 
 from .models import Event, EventCategory, Location
+from .logging_utils import get_logger, is_debug
 
 
 # Domains that require JavaScript rendering (Playwright)
@@ -158,6 +159,7 @@ class Extractor:
         self.max_content_length = max_content_length
         self.force_playwright = use_playwright
         self.max_iframes = int(os.getenv("MAX_IFRAMES", "3"))
+        self.logger = get_logger(__name__)
         self.http_client = httpx.Client(
             timeout=30.0,
             follow_redirects=True,
@@ -184,9 +186,19 @@ class Extractor:
             List of extracted Event objects.
         """
         try:
+            self.logger.info("Extracting events from %s", url)
+            if is_debug():
+                self.logger.debug(
+                    "Settings: model=%s playwright=%s max_iframes=%s max_content_length=%s",
+                    self.model,
+                    self.force_playwright,
+                    self.max_iframes,
+                    self.max_content_length,
+                )
             # Fetch and convert HTML
             html = self._fetch_html(url)
             if not html:
+                self.logger.warning("No HTML fetched from %s", url)
                 return []
             
             expanded_html = self._expand_iframes(html, url)
@@ -202,6 +214,7 @@ class Extractor:
                 and not self.force_playwright
                 and not _needs_playwright(url)
             ):
+                self.logger.info("Retrying extraction with Playwright for %s", url)
                 html_pw = self._fetch_html_playwright(url)
                 if html_pw:
                     expanded_html = self._expand_iframes(html_pw, url)
@@ -212,10 +225,12 @@ class Extractor:
                     )
             
             print(f"[Extractor] Found {len(events)} events from {url}")
+            self.logger.info("Found %s events from %s", len(events), url)
             return events
             
         except Exception as e:
             print(f"[Extractor] Error extracting from {url}: {e}")
+            self.logger.exception("Extractor error for %s", url)
             return []
     
     def _fetch_html(self, url: str) -> Optional[str]:
@@ -242,9 +257,12 @@ class Extractor:
         try:
             response = self.http_client.get(url)
             response.raise_for_status()
+            if is_debug():
+                self.logger.debug("Fetched %s via httpx (%s bytes)", url, len(response.text))
             return response.text
         except Exception as e:
             print(f"[Extractor] Failed to fetch {url} via httpx: {e}")
+            self.logger.warning("httpx failed for %s: %s", url, e)
             return None
 
     def _fetch_html_playwright(self, url: str) -> Optional[str]:
@@ -278,15 +296,20 @@ class Extractor:
 
         try:
             print(f"[Extractor] Using Playwright for {url}")
+            if is_debug():
+                self.logger.debug("Using Playwright for %s", url)
 
             # Run Playwright in a separate thread to avoid asyncio conflicts
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(_fetch_in_thread)
                 html = future.result(timeout=60)
+                if html and is_debug():
+                    self.logger.debug("Fetched %s via Playwright (%s bytes)", url, len(html))
                 return html
 
         except Exception as e:
             print(f"[Extractor] Failed to fetch {url} via Playwright: {e}")
+            self.logger.warning("Playwright failed for %s: %s", url, e)
             return None
 
     def _absolutize_links(self, html: str, base_url: str) -> str:
@@ -328,6 +351,8 @@ class Extractor:
                 continue
             seen.add(iframe_url)
 
+            if is_debug():
+                self.logger.debug("Fetching iframe: %s", iframe_url)
             iframe_html = self._fetch_html_httpx(iframe_url)
             if iframe_html is None:
                 iframe_html = self._fetch_html_playwright(iframe_url)
@@ -335,6 +360,9 @@ class Extractor:
             if iframe_html:
                 iframe_html = self._absolutize_links(iframe_html, iframe_url)
                 appended.append(f"\n<!-- iframe:{iframe_url} -->\n{iframe_html}\n<!-- /iframe -->\n")
+            else:
+                if is_debug():
+                    self.logger.debug("Iframe fetch failed: %s", iframe_url)
 
             if len(appended) >= self.max_iframes:
                 break
@@ -342,6 +370,8 @@ class Extractor:
         if not appended:
             return html
 
+        if is_debug():
+            self.logger.debug("Inlined %s iframe(s)", len(appended))
         return html + "\n" + "\n".join(appended)
     
     def _html_to_markdown(self, html: str) -> str:
@@ -384,7 +414,10 @@ class Extractor:
         # Truncate if too long
         if len(markdown) > self.max_content_length:
             markdown = markdown[:self.max_content_length] + "\n\n[... Content truncated ...]"
-        
+
+        if is_debug():
+            self.logger.debug("Markdown length: %s chars", len(markdown))
+
         return markdown
     
     def _extract_via_llm(
@@ -417,6 +450,8 @@ class Extractor:
             
             # Track token usage
             self._last_tokens_used = response.usage.total_tokens if response.usage else 0
+            if is_debug():
+                self.logger.debug("LLM tokens used: %s", self._last_tokens_used)
             
             result = response.choices[0].message.content.strip()
             
@@ -426,6 +461,7 @@ class Extractor:
             
         except Exception as e:
             print(f"[Extractor] LLM error: {e}")
+            self.logger.warning("LLM error for %s: %s", source_url, e)
             return []
     
     def _parse_events(self, json_str: str, source_url: str) -> list[Event]:
@@ -447,6 +483,7 @@ class Extractor:
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
             print(f"[Extractor] JSON parse error: {e}")
+            self.logger.warning("JSON parse error: %s", e)
             return []
         
         if not isinstance(data, list):
@@ -498,6 +535,8 @@ class Extractor:
                 
             except Exception as e:
                 print(f"[Extractor] Failed to parse event: {e}")
+                if is_debug():
+                    self.logger.debug("Failed to parse event item: %s", item)
                 continue
         
         return events
@@ -576,6 +615,8 @@ class Extractor:
             if len(links) >= 200:
                 break
 
+        if is_debug():
+            self.logger.debug("Extracted %s links (showing up to 5): %s", len(links), links[:5])
         return "\n".join(links) if links else "Keine Links gefunden."
     
     def close(self):
