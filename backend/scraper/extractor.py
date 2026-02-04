@@ -84,30 +84,38 @@ URL: {source_url}
 Webseiten-Inhalt:
 {content}
 
+Verfuegbare Links (Text -> URL):
+{link_list}
+
 Antworte NUR mit einem JSON-Array von Events im folgenden Format:
 [
   {{
-    "title": "Event-Titel (prägnant, ohne Datum im Titel)",
+    "title": "Event-Titel (pr?gnant, ohne Datum im Titel)",
     "description": "Kurze Beschreibung des Events (max 200 Zeichen, was erwartet die Familie?)",
     "date_start": "2026-02-15T15:00:00",
     "date_end": "2026-02-15T17:00:00",
     "location": {{
       "name": "Veranstaltungsort (z.B. Klecks Theater, Tierpark Hagenbeck)",
-      "address": "Vollständige Adresse: Straße Hausnummer, PLZ Hamburg-Stadtteil",
-      "district": "Hamburger Stadtteil (z.B. Altona, Eimsbüttel, Wandsbek)"
+      "address": "Vollst?ndige Adresse: Stra?e Hausnummer, PLZ Hamburg-Stadtteil",
+      "district": "Hamburger Stadtteil (z.B. Altona, Eimsb?ttel, Wandsbek)"
     }},
     "category": "theater|outdoor|museum|music|sport|market",
     "is_indoor": true,
     "age_suitability": "4+" oder "0-3" oder "6+" oder "alle",
-    "price_info": "8€" oder "5-10€" oder "Kostenlos",
-    "original_link": "https://... (direkter Link zum Event falls vorhanden)"
+    "price_info": "8?" oder "5-10?" oder "Kostenlos",
+    "original_link": "https://... (direkter Link zur Event-Detailseite)"
   }}
 ]
 
 WICHTIG zur Location:
 - Wenn die Quelle selbst ein Veranstaltungsort ist (z.B. ein Theater), verwende dessen Namen und Adresse
-- Suche im Text nach Straßennamen, PLZ (20xxx für Hamburg), Stadtteilen
-- "district" ist optional aber hilfreich für die Filterung
+- Suche im Text nach Stra?ennamen, PLZ (20xxx f?r Hamburg), Stadtteilen
+- "district" ist optional aber hilfreich f?r die Filterung
+
+WICHTIG zu Links:
+- Nutze wenn m?glich den spezifischen Detail-Link zum Event (nicht die Kalender-Uebersicht)
+- Verwende dafuer die Linkliste oder Links im Text
+- Falls kein Detail-Link erkennbar ist, nutze die Kalender-URL als Fallback
 
 Wenn keine passenden Events gefunden werden, antworte mit: []"""
 
@@ -174,9 +182,10 @@ class Extractor:
                 return []
             
             markdown_content = self._html_to_markdown(html)
+            link_list = self._extract_links(html, url)
 
             # Extract events via LLM
-            events = self._extract_via_llm(markdown_content, url, source_name)
+            events = self._extract_via_llm(markdown_content, url, source_name, link_list)
             
             print(f"[Extractor] Found {len(events)} events from {url}")
             return events
@@ -287,7 +296,6 @@ class Extractor:
             content_html,
             heading_style="ATX",
             bullets="-",
-            strip=["a"],  # Keep link text but remove href to save tokens
         )
         
         # Clean up excessive whitespace
@@ -300,14 +308,21 @@ class Extractor:
         
         return markdown
     
-    def _extract_via_llm(self, content: str, source_url: str, source_name: str = "") -> list[Event]:
+    def _extract_via_llm(
+        self,
+        content: str,
+        source_url: str,
+        source_name: str = "",
+        link_list: Optional[str] = None,
+    ) -> list[Event]:
         """
         Use LLM to extract events from markdown content.
         """
         user_prompt = EXTRACTION_USER_PROMPT.format(
             content=content,
             source_url=source_url,
-            source_name=source_name or "Unbekannt"
+            source_name=source_name or "Unbekannt",
+            link_list=link_list or "Keine Links gefunden.",
         )
         
         try:
@@ -386,7 +401,7 @@ class Extractor:
                     continue  # Skip events without start date
                 
                 # Build original link
-                original_link = item.get("original_link", source_url)
+                original_link = self._normalize_url(item.get("original_link"), source_url)
                 
                 event = Event(
                     title=item.get("title", "Unbekannt"),
@@ -430,6 +445,59 @@ class Extractor:
                 continue
         
         return None
+
+    def _normalize_url(self, url: Optional[str], base_url: str) -> str:
+        """Normalize a URL, resolving relative links against base_url."""
+        from urllib.parse import urljoin
+
+        if not url:
+            return base_url
+
+        cleaned = url.strip()
+        if not cleaned:
+            return base_url
+
+        lowered = cleaned.lower()
+        if lowered in {"unbekannt", "unknown", "k.a.", "ka"}:
+            return base_url
+
+        return urljoin(base_url, cleaned)
+
+    def _extract_links(self, html: str, base_url: str) -> str:
+        """Extract and format a compact list of links (text -> absolute URL)."""
+        from urllib.parse import urljoin, urlparse
+
+        soup = BeautifulSoup(html, "lxml")
+        links = []
+        seen = set()
+
+        for anchor in soup.find_all("a", href=True):
+            href = anchor.get("href")
+            if not href:
+                continue
+            href = href.strip()
+            if href.startswith(("#", "mailto:", "tel:", "javascript:")):
+                continue
+
+            text = anchor.get_text(" ", strip=True)
+            if not text:
+                continue
+
+            absolute = urljoin(base_url, href)
+            parsed = urlparse(absolute)
+            if not parsed.scheme.startswith("http"):
+                continue
+
+            key = (text.lower(), absolute)
+            if key in seen:
+                continue
+            seen.add(key)
+            links.append(f"{text} -> {absolute}")
+
+            if len(links) >= 200:
+                break
+
+        return "\n".join(links) if links else "Keine Links gefunden."
     
     def close(self):
         """Cleanup resources."""
