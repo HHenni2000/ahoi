@@ -441,7 +441,10 @@ class Extractor:
             if candidate.endswith("output=csv") or "tqx=out%3Acsv" in candidate or "tqx=out:csv" in candidate:
                 lines = [line.strip() for line in html_or_csv.splitlines() if line.strip()]
                 if lines:
-                    return "\n".join(lines[:200])
+                    csv_content = "\n".join(lines[:200])
+                    print(f"[Extractor] 📊 Found CSV with {len(lines)} rows, using first 200 rows")
+                    print(f"[Extractor] 📋 CSV preview (first 500 chars):\n{csv_content[:500]}\n[...]")
+                    return csv_content
 
             # Try to parse HTML table
             soup = BeautifulSoup(html_or_csv, "lxml")
