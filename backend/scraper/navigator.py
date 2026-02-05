@@ -122,6 +122,15 @@ class Navigator:
             The discovered calendar URL, or None if not found.
         """
         try:
+            # Quick check: If input_url already looks like a calendar URL, use it directly
+            url_lower = source.input_url.lower()
+            calendar_indicators = ["termine", "spielplan", "kalender", "vorstellungen", "auffuehrungen", "programm"]
+
+            if any(indicator in url_lower for indicator in calendar_indicators):
+                print(f"[Navigator] Input URL already looks like a calendar, using it directly: {source.input_url}")
+                self.logger.info("Navigator: Input URL already contains calendar keywords, using directly: %s", source.input_url)
+                return source.input_url
+
             # Fetch the root page
             html = self._fetch_html(source.input_url)
             if not html:
