@@ -26,6 +26,7 @@ from .logging_utils import get_logger, is_debug
 JS_REQUIRED_DOMAINS = [
     "kindaling.de",
     "kinderzeit-bremen.de",
+    "alleetheater.de",  # Uses AJAX/dynamic loading for events
 ]
 
 

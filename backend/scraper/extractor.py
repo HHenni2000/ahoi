@@ -30,6 +30,7 @@ from .structured_extractor import StructuredExtractor, RawEvent
 JS_REQUIRED_DOMAINS = [
     "kindaling.de",
     "kinderzeit-bremen.de",
+    "alleetheater.de",  # Uses AJAX/dynamic loading for events
     # Add more domains as discovered
 ]
 
