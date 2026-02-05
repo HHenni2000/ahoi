@@ -15,6 +15,8 @@ from urllib.parse import urljoin, urlparse
 
 from openai import OpenAI
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from bs4 import BeautifulSoup
+import httpx
 
 from .models import Event, EventCategory, Location
 from .logging_utils import get_logger
@@ -324,6 +326,47 @@ def _parse_event_from_vision_dict(
         return None
 
 
+def _detect_google_sheets_iframe(url: str) -> Optional[str]:
+    """
+    Detect if page contains a Google Sheets iframe and return its URL.
+
+    Args:
+        url: Page URL to check
+
+    Returns:
+        Google Sheets URL if found, None otherwise
+    """
+    try:
+        # Fetch the page HTML
+        response = httpx.get(url, timeout=10.0, follow_redirects=True)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "lxml")
+
+        # Look for Google Sheets iframes
+        for iframe in soup.find_all("iframe"):
+            src = iframe.get("src", "")
+            if "docs.google.com/spreadsheets" in src:
+                # Make absolute URL
+                if src.startswith("//"):
+                    src = "https:" + src
+                elif src.startswith("/"):
+                    src = urljoin(url, src)
+
+                logger.info(f"Found Google Sheets iframe: {src}")
+                print(f"[Vision] 📊 Detected Google Sheets iframe: {src}")
+
+                # Convert to pubhtml for better screenshot rendering
+                if "/pub?" in src or "/pubhtml" in src:
+                    return src
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"Failed to detect iframe: {e}")
+        return None
+
+
 def extract_events_with_vision(
     client: OpenAI,
     url: str,
@@ -345,6 +388,12 @@ def extract_events_with_vision(
         List of Event objects
     """
     logger.info(f"Starting vision-based extraction for: {url}")
+
+    # Check for embedded Google Sheets - if found, use that URL instead
+    iframe_url = _detect_google_sheets_iframe(url)
+    if iframe_url:
+        print(f"[Vision] 🎯 Using Google Sheets URL for screenshot instead of main page")
+        url = iframe_url
 
     # Take screenshot
     screenshot_bytes = _take_screenshot(url, full_page=True)
