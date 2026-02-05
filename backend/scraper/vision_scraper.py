@@ -35,12 +35,24 @@ Deine Aufgabe:
 4. WICHTIG: Extrahiere maximal 30 Events um die Response-Länge zu begrenzen
 
 KATEGORIEN (wähle die am besten passende):
-- theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, Lesungen mit Schauspiel
+- theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, szenische Lesungen
 - outdoor: Outdoor-Aktivitäten, Naturerlebnisse, Spielplatz-Events, Walderlebnisse, Tierparkbesuche, Radtouren
-- museum: Museumsbesuche, Ausstellungen, Führungen, Planetarium, Science Center, Workshops in Museen
+- museum: Museumsbesuche, Ausstellungen, Führungen, Planetarium, Science Center, interaktive Ausstellungen
 - music: Konzerte für Kinder, Mitmachkonzerte, Musikworkshops, Kinderdisco, Singveranstaltungen
 - sport: Sportevents, Turniere, Sportkurse, Schwimmen, Klettern, Tanzkurse, Bewegungsangebote
 - market: Märkte, Flohmärkte, Festivals, Stadtteilfeste, Kinderfeste, Basare
+- kreativ: Basteln, Malen, Werken, DIY, Kreativ-Workshops, Töpfern, Handarbeitsangebote
+- lesen: Vorlesestunden, Bilderbuchkino, Leseförderung, Buchclubs, Buch- und Geschichtenformate
+
+KATEGORISIERUNGS-REGELN:
+- Kategorisiere IMMER nach der HAUPTAKTIVITÄT des Events, NICHT nach dem Veranstaltungsort
+- Ein Malnachmittag in einer Bücherhalle -> "kreativ"
+- Eine Vorlesestunde in einer Bücherhalle -> "lesen"
+- Eine Theateraufführung im Theater -> "theater"
+- Eine Ausstellung im Museum -> "museum"
+- Wenn ein Theaterstück musikalische Elemente hat -> "theater" (Hauptattraktion)
+- Zirkus mit Aufführung -> "theater", Zirkusworkshop zum Mitmachen -> "sport"
+- Kinder-Flohmarkt -> "market", nicht "outdoor" auch wenn draußen
 
 LOCATION-EXTRAKTION (SEHR WICHTIG!):
 - Extrahiere den VOLLSTÄNDIGEN Veranstaltungsort für JEDES Event einzeln
@@ -72,7 +84,7 @@ Wichtig: Gib die Antwort als JSON-Array zurück:
     "location_name": "Venue-Name",
     "location_address": "Straße Nr, PLZ Stadt",
     "location_district": "Stadtteil",
-    "category": "theater|outdoor|museum|music|sport|market",
+    "category": "theater|outdoor|museum|music|sport|market|kreativ|lesen",
     "is_indoor": true|false,
     "age_suitability": "4+",
     "price_info": "8€",

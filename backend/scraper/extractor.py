@@ -51,16 +51,22 @@ Deine Aufgabe:
 3. Kategorisiere jedes Event PRÄZISE nach dem Hauptinhalt:
 
 KATEGORIEN (wähle die am besten passende):
-- theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, Lesungen mit Schauspiel
+- theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, szenische Lesungen
 - outdoor: Outdoor-Aktivitäten, Naturerlebnisse, Spielplatz-Events, Walderlebnisse, Tierparkbesuche, Radtouren, Wanderungen, Picknicks
-- museum: Museumsbesuche, Ausstellungen, Führungen, Planetarium, Science Center, interaktive Ausstellungen, Workshops in Museen
+- museum: Museumsbesuche, Ausstellungen, Führungen, Planetarium, Science Center, interaktive Ausstellungen
 - music: Konzerte für Kinder, Mitmachkonzerte, Musikworkshops, Kinderdisco, Singveranstaltungen
 - sport: Sportevents, Turniere, Sportkurse, Schwimmen, Klettern, Tanzkurse, Bewegungsangebote, Zirkusworkshops
 - market: Märkte, Flohmärkte, Festivals, Stadtteilfeste, Kinderfeste, Basare, Weihnachtsmärkte, Oster-Events
+- kreativ: Basteln, Malen, Werken, DIY, Kreativ-Workshops, Töpfern, Handarbeitsangebote
+- lesen: Vorlesestunden, Bilderbuchkino, Leseförderung, Buchclubs, Buch- und Geschichtenformate
 
-KATEGORISIERUNGS-PRIORISIERUNG:
-- Wenn ein Theater auch Musik hat → "theater" (Hauptattraktion)
-- Wenn ein Museum einen Workshop anbietet → "museum" (Ort ist entscheidend)
+KATEGORISIERUNGS-REGELN:
+- Kategorisiere IMMER nach der HAUPTAKTIVITÄT des Events, NICHT nach dem Veranstaltungsort
+- Ein Malnachmittag in einer Bücherhalle → "kreativ"
+- Eine Vorlesestunde in einer Bücherhalle → "lesen"
+- Eine Theateraufführung im Theater → "theater"
+- Eine Ausstellung im Museum → "museum"
+- Wenn ein Theaterstück musikalische Elemente hat → "theater" (Hauptattraktion)
 - Zirkus mit Aufführung → "theater", Zirkusworkshop zum Mitmachen → "sport"
 - Kinder-Flohmarkt → "market", nicht "outdoor" auch wenn draußen
 
@@ -93,10 +99,13 @@ KATEGORIEN:
 - music: Konzerte, Mitmachkonzerte, Musikworkshops
 - sport: Sportevents, Tanzkurse, Bewegungsangebote
 - market: Märkte, Festivals, Stadtteilfeste
+- kreativ: Basteln, Malen, Werken, DIY, Kreativ-Workshops
+- lesen: Vorlesestunden, Bilderbuchkino, Leseförderung, Buch- und Geschichtenformate
 
 Wichtige Regeln:
 - Ignoriere Events für Erwachsene (z.B. "ab 16 Jahren", Opern für Erwachsene)
 - Filtere streng: Nur Events die wirklich für Kinder ab 4 Jahren geeignet sind
+- Kategorisiere IMMER nach Hauptaktivität, nicht nach Veranstaltungsort
 - Kategorisiere präzise nach Hauptinhalt"""
 
 ENRICHMENT_USER_PROMPT = """Bewerte und kategorisiere diese Events. Filtere NUR familienfreundliche Events (ab 4 Jahren).
@@ -111,7 +120,7 @@ Antworte mit einem JSON-Array. Für jedes familienfreundliche Event:
   {{
     "index": 0,
     "is_family_friendly": true,
-    "category": "theater|outdoor|museum|music|sport|market",
+    "category": "theater|outdoor|museum|music|sport|market|kreativ|lesen",
     "age_suitability": "4+" oder "0-3" oder "6+" oder "alle",
     "description": "Kurze Beschreibung (max 200 Zeichen)",
     "price_info": "8€" oder "Kostenlos" oder "Unbekannt"
@@ -145,7 +154,7 @@ Antworte NUR mit einem JSON-Array von Events im folgenden Format:
       "address": "Vollst?ndige Adresse: Stra?e Hausnummer, PLZ Hamburg-Stadtteil",
       "district": "Hamburger Stadtteil (z.B. Altona, Eimsb?ttel, Wandsbek)"
     }},
-    "category": "theater|outdoor|museum|music|sport|market",
+    "category": "theater|outdoor|museum|music|sport|market|kreativ|lesen",
     "is_indoor": true,
     "age_suitability": "4+" oder "0-3" oder "6+" oder "alle",
     "price_info": "8?" oder "5-10?" oder "Kostenlos",

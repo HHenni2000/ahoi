@@ -18,6 +18,8 @@ class EventCategory(str, Enum):
     MUSIC = "music"
     SPORT = "sport"
     MARKET = "market"
+    KREATIV = "kreativ"
+    LESEN = "lesen"
 
 
 class SourceStatus(str, Enum):

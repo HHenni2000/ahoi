@@ -46,16 +46,22 @@ Deine Aufgabe:
 3. Kategorisiere jedes Event PRÄZISE nach dem Hauptinhalt:
 
 KATEGORIEN (wähle die am besten passende):
-- theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, Lesungen mit Schauspiel
+- theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, szenische Lesungen
 - outdoor: Outdoor-Aktivitäten, Naturerlebnisse, Spielplatz-Events, Walderlebnisse, Tierparkbesuche, Radtouren, Wanderungen, Picknicks
-- museum: Museumsbesuche, Ausstellungen, Führungen, Planetarium, Science Center, interaktive Ausstellungen, Workshops in Museen
+- museum: Museumsbesuche, Ausstellungen, Führungen, Planetarium, Science Center, interaktive Ausstellungen
 - music: Konzerte für Kinder, Mitmachkonzerte, Musikworkshops, Kinderdisco, Singveranstaltungen
 - sport: Sportevents, Turniere, Sportkurse, Schwimmen, Klettern, Tanzkurse, Bewegungsangebote, Zirkusworkshops
 - market: Märkte, Flohmärkte, Festivals, Stadtteilfeste, Kinderfeste, Basare, Weihnachtsmärkte, Oster-Events
+- kreativ: Basteln, Malen, Werken, DIY, Kreativ-Workshops, Töpfern, Handarbeitsangebote
+- lesen: Vorlesestunden, Bilderbuchkino, Leseförderung, Buchclubs, Buch- und Geschichtenformate
 
-KATEGORISIERUNGS-PRIORISIERUNG:
-- Wenn ein Theater auch Musik hat → "theater" (Hauptattraktion)
-- Wenn ein Museum einen Workshop anbietet → "museum" (Ort ist entscheidend)
+KATEGORISIERUNGS-REGELN:
+- Kategorisiere IMMER nach der HAUPTAKTIVITÄT des Events, NICHT nach dem Veranstaltungsort
+- Ein Malnachmittag in einer Bücherhalle → "kreativ"
+- Eine Vorlesestunde in einer Bücherhalle → "lesen"
+- Eine Theateraufführung im Theater → "theater"
+- Eine Ausstellung im Museum → "museum"
+- Wenn ein Theaterstück musikalische Elemente hat → "theater" (Hauptattraktion)
 - Zirkus mit Aufführung → "theater", Zirkusworkshop zum Mitmachen → "sport"
 - Kinder-Flohmarkt → "market", nicht "outdoor" auch wenn draußen
 
@@ -96,7 +102,7 @@ Antworte NUR mit einem JSON-Array von Events im folgenden Format:
       "address": "Vollständige Adresse: Straße Hausnummer, PLZ Hamburg-Stadtteil",
       "district": "Hamburger Stadtteil (z.B. Altona, Eimsbüttel, Wandsbek)"
     }},
-    "category": "theater|outdoor|museum|music|sport|market",
+    "category": "theater|outdoor|museum|music|sport|market|kreativ|lesen",
     "is_indoor": true,
     "age_suitability": "4+" oder "0-3" oder "6+" oder "alle",
     "price_info": "8€" oder "5-10€" oder "Kostenlos",

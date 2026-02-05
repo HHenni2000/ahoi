@@ -102,7 +102,7 @@ curl -X POST http://localhost:5001/ahoi-hamburg/europe-west3/scrape_source \
 - `dateStart`: Timestamp
 - `dateEnd`: Timestamp (optional)
 - `location`: { name, address, district, lat, lng }
-- `category`: "theater" | "outdoor" | "museum" | "music" | "sport" | "market"
+- `category`: "theater" | "outdoor" | "museum" | "music" | "sport" | "market" | "kreativ" | "lesen"
 - `isIndoor`: Boolean
 - `ageSuitability`: "4+", "0-3", etc.
 - `priceInfo`: "8€", "Kostenlos", etc.

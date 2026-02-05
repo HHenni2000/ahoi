@@ -40,6 +40,8 @@ module.exports = {
           music: '#E91E63',      // Pink
           sport: '#3498DB',      // Blue
           market: '#F1C40F',     // Yellow
+          kreativ: '#FF6B6B',    // Coral
+          lesen: '#45B7D1',      // Teal
         },
       },
     },

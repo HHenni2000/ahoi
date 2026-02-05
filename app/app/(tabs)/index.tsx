@@ -33,6 +33,8 @@ const CATEGORY_FILTERS: { key: EventCategory | 'all'; label: string }[] = [
   { key: 'music', label: 'Musik' },
   { key: 'sport', label: 'Sport' },
   { key: 'market', label: 'Markt' },
+  { key: 'kreativ', label: 'Kreativ' },
+  { key: 'lesen', label: 'Lesen' },
 ];
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());

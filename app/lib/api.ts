@@ -74,6 +74,8 @@ const validCategories: EventCategory[] = [
   'music',
   'sport',
   'market',
+  'kreativ',
+  'lesen',
 ];
 
 const normalizeCategory = (category?: string | null): EventCategory => {
@@ -234,4 +236,3 @@ export const scrapeSource = async (sourceId: string) => {
     duration_seconds: number;
   }>(`/api/sources/${sourceId}/scrape`, { method: 'POST' });
 };
-

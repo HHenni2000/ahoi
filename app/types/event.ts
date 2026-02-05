@@ -1,6 +1,14 @@
 // Event types matching the backend schema
 
-export type EventCategory = 'theater' | 'outdoor' | 'museum' | 'music' | 'sport' | 'market';
+export type EventCategory =
+  | 'theater'
+  | 'outdoor'
+  | 'museum'
+  | 'music'
+  | 'sport'
+  | 'market'
+  | 'kreativ'
+  | 'lesen';
 
 export interface Location {
   name: string;

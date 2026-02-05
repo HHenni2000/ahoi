@@ -21,7 +21,8 @@
       "Bash(./venv/Scripts/python:*)",
       "Bash(netstat:*)",
       "Bash(curl:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }

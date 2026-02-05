@@ -8,6 +8,8 @@ import {
   Music,
   Medal,
   ShoppingBag,
+  Palette,
+  BookOpen,
   MapPin,
   Clock,
   Euro,
@@ -25,6 +27,8 @@ const CategoryIcon: Record<EventCategory, React.ComponentType<any>> = {
   music: Music,
   sport: Medal,
   market: ShoppingBag,
+  kreativ: Palette,
+  lesen: BookOpen,
 };
 
 // Category labels in German
@@ -35,6 +39,8 @@ const CategoryLabel: Record<EventCategory, string> = {
   music: 'Musik',
   sport: 'Sport',
   market: 'Markt',
+  kreativ: 'Kreativ',
+  lesen: 'Lesen',
 };
 
 interface EventCardProps {
