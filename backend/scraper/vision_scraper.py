@@ -8,7 +8,7 @@ Handles complex websites with iFrames, Google Sheets, and dynamic content.
 import base64
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Optional
 from urllib.parse import urljoin, urlparse
