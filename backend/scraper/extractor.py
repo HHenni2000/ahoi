@@ -531,22 +531,32 @@ class Extractor:
         
         # Find main content area if possible
         main_content = None
-        for selector in ["main", "article", "[role='main']", ".content", "#content", ".main"]:
-            main_content = soup.select_one(selector)
-            if main_content:
-                break
-        
-        # Use main content if found, otherwise use body
-        content_html = str(main_content) if main_content else str(soup.body or soup)
 
-        # Debug: Log which selector was used
-        if main_content:
-            selector_used = main_content.name + (f".{main_content.get('class')}" if main_content.get('class') else "")
-            print(f"[Extractor] 🔍 Using main content selector: {selector_used}")
-            self.logger.info("Using main content: %s", selector_used)
+        # Special case: If there are multiple <article> tags (calendar/event list), use all of them
+        articles = soup.find_all("article")
+        if len(articles) > 1:
+            print(f"[Extractor] 🔍 Found {len(articles)} <article> tags, using all (calendar/event list detected)")
+            self.logger.info("Using all %s articles for calendar content", len(articles))
+            # Combine all articles
+            content_html = "\n".join(str(article) for article in articles)
         else:
-            print(f"[Extractor] 🔍 Using full body (no main content found)")
-            self.logger.info("Using full body for conversion")
+            # Standard content detection for single-page content
+            for selector in ["main", "article", "[role='main']", ".content", "#content", ".main"]:
+                main_content = soup.select_one(selector)
+                if main_content:
+                    break
+
+            # Use main content if found, otherwise use body
+            content_html = str(main_content) if main_content else str(soup.body or soup)
+
+            # Debug: Log which selector was used
+            if main_content:
+                selector_used = main_content.name + (f".{main_content.get('class')}" if main_content.get('class') else "")
+                print(f"[Extractor] 🔍 Using main content selector: {selector_used}")
+                self.logger.info("Using main content: %s", selector_used)
+            else:
+                print(f"[Extractor] 🔍 Using full body (no main content found)")
+                self.logger.info("Using full body for conversion")
 
         print(f"[Extractor] 📄 HTML content: {len(content_html)} chars")
 
