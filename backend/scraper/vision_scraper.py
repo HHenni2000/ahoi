@@ -109,33 +109,33 @@ def _take_screenshot(url: str, full_page: bool = True) -> Optional[bytes]:
             )
             page = context.new_page()
 
-                logger.info(f"Loading page for screenshot: {url}")
-                page.goto(url, wait_until="networkidle", timeout=30000)
+            logger.info(f"Loading page for screenshot: {url}")
+            page.goto(url, wait_until="networkidle", timeout=30000)
 
-                # Wait a bit for dynamic content
-                page.wait_for_timeout(2000)
+            # Wait a bit for dynamic content
+            page.wait_for_timeout(2000)
 
-                # Scroll to bottom to trigger lazy loading
-                if full_page:
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    page.wait_for_timeout(1000)
-                    page.evaluate("window.scrollTo(0, 0)")
-                    page.wait_for_timeout(500)
+            # Scroll to bottom to trigger lazy loading
+            if full_page:
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(1000)
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(500)
 
-                # Take screenshot
-                screenshot_bytes = page.screenshot(full_page=full_page)
+            # Take screenshot
+            screenshot_bytes = page.screenshot(full_page=full_page)
 
-                # Save screenshot for debugging (optional)
-                debug_screenshot_path = os.path.join("data", "debug_screenshot.png")
-                os.makedirs(os.path.dirname(debug_screenshot_path), exist_ok=True)
-                with open(debug_screenshot_path, "wb") as f:
-                    f.write(screenshot_bytes)
-                logger.info(f"Screenshot saved to {debug_screenshot_path} for debugging")
+            # Save screenshot for debugging (optional)
+            debug_screenshot_path = os.path.join("data", "debug_screenshot.png")
+            os.makedirs(os.path.dirname(debug_screenshot_path), exist_ok=True)
+            with open(debug_screenshot_path, "wb") as f:
+                f.write(screenshot_bytes)
+            logger.info(f"Screenshot saved to {debug_screenshot_path} for debugging")
 
-                browser.close()
+            browser.close()
 
-                logger.info(f"Screenshot captured ({len(screenshot_bytes)} bytes)")
-                return screenshot_bytes
+            logger.info(f"Screenshot captured ({len(screenshot_bytes)} bytes)")
+            return screenshot_bytes
 
     try:
         with concurrent.futures.ThreadPoolExecutor() as executor:
