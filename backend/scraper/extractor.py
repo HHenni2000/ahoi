@@ -568,7 +568,11 @@ class Extractor:
         )
 
         print(f"[Extractor] 📝 Markdown (before cleanup): {len(markdown)} chars")
-        
+
+        # Debug: Show first 1500 chars of markdown to understand structure
+        if len(markdown) > 500:
+            print(f"[Extractor] 📋 Markdown preview (first 1500 chars):\n{markdown[:1500]}\n[...]")
+
         # Clean up excessive whitespace
         lines = [line.strip() for line in markdown.split("\n")]
         markdown = "\n".join(line for line in lines if line)

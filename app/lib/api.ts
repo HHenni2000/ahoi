@@ -219,6 +219,12 @@ export const updateSource = async (
   return toSource(data);
 };
 
+export const deleteSource = async (sourceId: string): Promise<void> => {
+  await request<{ deleted: boolean }>(`/api/sources/${sourceId}`, {
+    method: 'DELETE',
+  });
+};
+
 export const scrapeSource = async (sourceId: string) => {
   return request<{
     success: boolean;

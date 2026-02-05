@@ -18,12 +18,13 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
+  Trash2,
 } from 'lucide-react-native';
 
 import { Source, ScrapingMode } from '@/types/event';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { createSource, fetchSources, scrapeSource, updateSource } from '@/lib/api';
+import { createSource, fetchSources, scrapeSource, updateSource, deleteSource } from '@/lib/api';
 
 const StatusIcon = ({ status }: { status: Source['status'] }) => {
   const colorScheme = useColorScheme();
@@ -43,10 +44,11 @@ interface SourceCardProps {
   source: Source;
   onScrape: (source: Source) => void;
   onUpdate: (source: Source) => void;
+  onDelete: (source: Source) => void;
   isScraping: boolean;
 }
 
-function SourceCard({ source, onScrape, onUpdate, isScraping }: SourceCardProps) {
+function SourceCard({ source, onScrape, onUpdate, onDelete, isScraping }: SourceCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [expanded, setExpanded] = useState(false);
@@ -109,6 +111,12 @@ function SourceCard({ source, onScrape, onUpdate, isScraping }: SourceCardProps)
           ) : (
             <RefreshCw size={16} color="#FFFFFF" />
           )}
+        </Pressable>
+        <Pressable
+          style={[styles.deleteButton, { backgroundColor: colors.error }]}
+          onPress={() => onDelete(source)}
+        >
+          <Trash2 size={16} color="#FFFFFF" />
         </Pressable>
       </View>
 
@@ -331,6 +339,31 @@ export default function SourcesScreen() {
     }
   };
 
+  const handleDelete = async (source: Source) => {
+    Alert.alert(
+      'Quelle löschen',
+      `Möchten Sie "${source.name}" wirklich löschen? Alle zugehörigen Events werden ebenfalls gelöscht.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteSource(source.id);
+              await loadSources(true);
+              Alert.alert('Erfolg', 'Quelle wurde gelöscht');
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : 'Quelle konnte nicht gelöscht werden.';
+              Alert.alert('Fehler', message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Add Source Input */}
@@ -374,6 +407,7 @@ export default function SourcesScreen() {
             source={item}
             onScrape={handleScrape}
             onUpdate={() => void loadSources(true)}
+            onDelete={handleDelete}
             isScraping={scrapingSourceId === item.id}
           />
         )}
@@ -464,6 +498,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   sourceUrl: {
     fontSize: 13,
