@@ -81,13 +81,17 @@ Wichtig: Gib die Antwort als JSON-Array zurück:
 ]"""
 
 
-def _create_user_prompt(url: str, scraping_hints: Optional[str] = None) -> str:
+def _create_user_prompt(url: str, source_name: Optional[str] = None, scraping_hints: Optional[str] = None) -> str:
     """Create user prompt for vision extraction."""
     # Add dynamic date range (next 14 days)
     today = datetime.now().date()
     cutoff_date = today + timedelta(days=14)
 
     prompt = f"Analysiere diesen Screenshot der Webseite: {url}\n\n"
+
+    if source_name:
+        prompt += f"KONTEXT: Diese Daten stammen von \"{source_name}\". Wenn im Screenshot keine Location/Veranstaltungsort-Info sichtbar ist, verwende \"{source_name}\" als location_name.\n\n"
+
     prompt += f"WICHTIG: Heute ist der {today.strftime('%d.%m.%Y')}. Extrahiere NUR Events vom {today.strftime('%d.%m.%Y')} bis {cutoff_date.strftime('%d.%m.%Y')} (nächste 14 Tage).\n\n"
 
     if scraping_hints:
@@ -170,6 +174,7 @@ def _extract_events_from_vision(
     client: OpenAI,
     url: str,
     screenshot_bytes: bytes,
+    source_name: Optional[str] = None,
     scraping_hints: Optional[str] = None,
 ) -> list[dict]:
     """
@@ -179,6 +184,7 @@ def _extract_events_from_vision(
         client: OpenAI client
         url: Source URL
         screenshot_bytes: Screenshot as PNG bytes
+        source_name: Name of the source (e.g. theater name) for context
         scraping_hints: Optional hints for extraction
 
     Returns:
@@ -188,7 +194,7 @@ def _extract_events_from_vision(
     base64_image = _encode_image_base64(screenshot_bytes)
 
     # Create prompt
-    user_prompt = _create_user_prompt(url, scraping_hints)
+    user_prompt = _create_user_prompt(url, source_name, scraping_hints)
 
     logger.info("Calling GPT-4o Vision for event extraction...")
 
@@ -380,6 +386,7 @@ def extract_events_with_vision(
     client: OpenAI,
     url: str,
     source_id: str,
+    source_name: Optional[str] = None,
     region: str = "hamburg",
     scraping_hints: Optional[str] = None,
 ) -> list[Event]:
@@ -390,13 +397,14 @@ def extract_events_with_vision(
         client: OpenAI client
         url: URL to scrape
         source_id: Source ID
+        source_name: Name of the source for context (e.g. theater name)
         region: Region (default: hamburg)
         scraping_hints: Optional hints for extraction
 
     Returns:
         List of Event objects
     """
-    logger.info(f"Starting vision-based extraction for: {url}")
+    logger.info(f"Starting vision-based extraction for: {url} (source: {source_name})")
 
     # Check for embedded Google Sheets - if found, use that URL instead
     iframe_url = _detect_google_sheets_iframe(url)
@@ -415,7 +423,8 @@ def extract_events_with_vision(
         client,
         url,
         screenshot_bytes,
-        scraping_hints,
+        source_name=source_name,
+        scraping_hints=scraping_hints,
     )
 
     if not raw_events:

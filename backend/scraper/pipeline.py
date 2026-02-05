@@ -143,6 +143,7 @@ class ScrapingPipeline:
                     client=self.openai_client,
                     url=target_url,
                     source_id=source.id or "",
+                    source_name=source.name,
                     region=source.region,
                     scraping_hints=source.scraping_hints if hasattr(source, 'scraping_hints') else None,
                 )
