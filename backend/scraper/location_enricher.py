@@ -56,9 +56,11 @@ class LocationEnricher:
     def _load_venues(self) -> dict:
         try:
             if self.venue_path.exists():
-                return json.loads(self.venue_path.read_text(encoding="utf-8"))
+                data = json.loads(self.venue_path.read_text(encoding="utf-8"))
+                logger.info(f"[LocationEnricher] Loaded {len(data)} venues from lookup table")
+                return data
         except Exception as e:
-            logger.warning(f"Failed to load venue addresses: {e}")
+            logger.warning(f"[LocationEnricher] Failed to load venue addresses: {e}")
         return {}
 
     def _save_venues(self) -> None:
@@ -71,8 +73,9 @@ class LocationEnricher:
                 encoding="utf-8",
             )
             self._cache_dirty = False
+            logger.info(f"[LocationEnricher] Saved {len(self._venue_cache)} venues to lookup table")
         except Exception as e:
-            logger.warning(f"Failed to save venue addresses: {e}")
+            logger.warning(f"[LocationEnricher] Failed to save venue addresses: {e}")
 
     def _needs_enrichment(self, event: Event) -> bool:
         """Check if an event has a venue name but no usable address."""
@@ -112,6 +115,8 @@ REGELN:
 - Verwende das exakte Format: "Straße Hausnummer, PLZ Hamburg"
 - District ist der Hamburger Stadtteil (z.B. Altona, Eimsbüttel, Wandsbek)"""
 
+        logger.info(f"[LocationEnricher] LLM prompt:\n{prompt}")
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -121,6 +126,7 @@ REGELN:
             )
 
             raw = response.choices[0].message.content.strip()
+            logger.info(f"[LocationEnricher] LLM raw response:\n{raw}")
 
             # Strip markdown fences if present
             if raw.startswith("```"):
@@ -131,11 +137,15 @@ REGELN:
 
             results = json.loads(raw)
             if not isinstance(results, dict):
+                logger.warning(f"[LocationEnricher] LLM returned non-dict: {type(results)}")
                 return {}
             return results
 
+        except json.JSONDecodeError as e:
+            logger.warning(f"[LocationEnricher] LLM response was not valid JSON: {e}\nRaw: {raw}")
+            return {}
         except Exception as e:
-            logger.warning(f"LLM location lookup failed: {e}")
+            logger.warning(f"[LocationEnricher] LLM location lookup failed: {e}")
             return {}
 
     def enrich_events(self, events: list[Event]) -> int:
@@ -147,33 +157,74 @@ REGELN:
         if not events:
             return 0
 
+        # Log full location status for ALL events
+        logger.info(f"[LocationEnricher] === Location status for {len(events)} events ===")
+        for i, event in enumerate(events):
+            name = event.location.name or "(leer)"
+            addr = event.location.address or "(leer)"
+            district = event.location.district or "(leer)"
+            name_unknown = _is_unknown(event.location.name)
+            addr_unknown = _is_unknown(event.location.address)
+            status = "OK" if not addr_unknown else ("KEIN NAME" if name_unknown else "BRAUCHT ADRESSE")
+            logger.info(
+                f"[LocationEnricher]   [{i+1}] {status} | "
+                f"title=\"{event.title}\" | "
+                f"name=\"{name}\" | "
+                f"address=\"{addr}\" | "
+                f"district=\"{district}\""
+            )
+
         needs_enrichment = [e for e in events if self._needs_enrichment(e)]
+        no_name = [e for e in events if _is_unknown(e.location.name) and _is_unknown(e.location.address)]
+
+        if no_name:
+            logger.warning(
+                f"[LocationEnricher] {len(no_name)} event(s) haben WEDER Name NOCH Adresse - "
+                f"Extractor hat keine Location-Infos geliefert:"
+            )
+            for e in no_name:
+                logger.warning(f"[LocationEnricher]   -> \"{e.title}\" (source: {e.source_id})")
+
         if not needs_enrichment:
+            logger.info(f"[LocationEnricher] Alle {len(events)} Events haben bereits eine Adresse, nichts zu tun")
             return 0
 
+        logger.info(f"[LocationEnricher] {len(needs_enrichment)} von {len(events)} Events brauchen eine Adresse")
+
         enriched = 0
+        local_hits = 0
+        llm_hits = 0
         needs_llm: list[tuple[Event, str]] = []
+        llm_results: dict = {}
 
         # Step 1: Try local lookup
         for event in needs_enrichment:
             venue_name = event.location.name
+            key = _normalize_venue_name(venue_name)
             local = self._lookup_local(venue_name)
             if local:
                 event.location.address = local["address"]
                 if local.get("district"):
                     event.location.district = local["district"]
                 enriched += 1
-                logger.info(f"Local lookup hit: '{venue_name}' -> {local['address']}")
+                local_hits += 1
+                logger.info(f"[LocationEnricher] LOCAL HIT: \"{venue_name}\" (key=\"{key}\") -> {local['address']}")
             else:
+                logger.info(f"[LocationEnricher] LOCAL MISS: \"{venue_name}\" (key=\"{key}\") -> nicht in Lookup-Tabelle")
                 needs_llm.append((event, venue_name))
 
         # Step 2: LLM fallback for remaining venues
         if needs_llm:
             # Deduplicate venue names for the LLM call
             unique_names = list(dict.fromkeys(name for _, name in needs_llm))
-            logger.info(f"Querying LLM for {len(unique_names)} unknown venue(s)...")
+            logger.info(
+                f"[LocationEnricher] Frage LLM nach {len(unique_names)} unbekannten Venue(s): "
+                f"{unique_names}"
+            )
 
             llm_results = self._lookup_llm(unique_names)
+
+            logger.info(f"[LocationEnricher] LLM Ergebnis (parsed): {json.dumps(llm_results, ensure_ascii=False)}")
 
             # Apply results and save to local cache
             for event, venue_name in needs_llm:
@@ -182,7 +233,6 @@ REGELN:
                     event.location.address = result["address"]
                     if result.get("district"):
                         event.location.district = result["district"]
-                    enriched += 1
 
                     # Save to local cache for future use
                     key = _normalize_venue_name(venue_name)
@@ -191,11 +241,38 @@ REGELN:
                         "district": result.get("district"),
                     }
                     self._cache_dirty = True
-                    logger.info(f"LLM lookup hit: '{venue_name}' -> {result['address']} (saved to cache)")
+                    enriched += 1
+                    llm_hits += 1
+                    logger.info(
+                        f"[LocationEnricher] LLM HIT: \"{venue_name}\" -> "
+                        f"{result['address']}, {result.get('district', '?')} (in Cache gespeichert)"
+                    )
                 else:
-                    logger.info(f"No address found for: '{venue_name}'")
+                    reason = "null/leer vom LLM" if result is None else f"ungültiges Format: {result}"
+                    logger.warning(
+                        f"[LocationEnricher] LLM MISS: \"{venue_name}\" -> {reason} "
+                        f"*** HIER FEHLT DIE ADRESSE - Google Places API nötig? ***"
+                    )
 
         self._save_venues()
+
+        # Final summary
+        still_missing = [e for e in events if _is_unknown(e.location.address)]
+        logger.info(
+            f"[LocationEnricher] === Zusammenfassung ===\n"
+            f"[LocationEnricher]   Events gesamt:       {len(events)}\n"
+            f"[LocationEnricher]   Brauchten Adresse:   {len(needs_enrichment)}\n"
+            f"[LocationEnricher]   Lokal gefunden:      {local_hits}\n"
+            f"[LocationEnricher]   LLM gefunden:        {llm_hits}\n"
+            f"[LocationEnricher]   Immer noch ohne:     {len(still_missing)}"
+        )
+        if still_missing:
+            logger.warning(f"[LocationEnricher] Events OHNE Adresse nach Enrichment:")
+            for e in still_missing:
+                logger.warning(
+                    f"[LocationEnricher]   -> \"{e.title}\" | name=\"{e.location.name}\" | "
+                    f"addr=\"{e.location.address}\" *** NICHT AUFGELÖST ***"
+                )
 
         if enriched:
             print(f"[LocationEnricher] Enriched {enriched}/{len(needs_enrichment)} events with addresses")
