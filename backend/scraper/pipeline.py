@@ -10,6 +10,7 @@ This module ties together Navigator, Extractor, and Deduplicator.
 """
 
 import time
+from datetime import datetime, timedelta
 from typing import Optional
 
 from openai import OpenAI
@@ -20,6 +21,39 @@ from .extractor import Extractor
 from .deduplicator import Deduplicator
 from .geocoder import Geocoder
 from .vision_scraper import extract_events_with_vision
+
+
+def _filter_events_by_date_range(events: list[Event], days_ahead: int = 14) -> tuple[list[Event], int]:
+    """
+    Filter events to only include those within the next X days.
+
+    Args:
+        events: List of events to filter
+        days_ahead: Number of days into the future to keep (default: 14)
+
+    Returns:
+        Tuple of (filtered_events, removed_count)
+    """
+    today = datetime.now().date()
+    cutoff_date = today + timedelta(days=days_ahead)
+
+    filtered = []
+    for event in events:
+        # Get event date
+        if isinstance(event.date_start, datetime):
+            event_date = event.date_start.date()
+        else:
+            event_date = event.date_start
+
+        # Keep events within the date range
+        if today <= event_date <= cutoff_date:
+            filtered.append(event)
+
+    removed = len(events) - len(filtered)
+    if removed > 0:
+        print(f"[Pipeline] 📅 Date filtering: {len(events)} events → {len(filtered)} events ({removed} events outside next {days_ahead} days removed)")
+
+    return filtered, removed
 
 
 class ScrapingPipeline:
@@ -105,6 +139,10 @@ class ScrapingPipeline:
                     region=source.region,
                     scraping_hints=source.scraping_hints if hasattr(source, 'scraping_hints') else None,
                 )
+
+                # Filter events by date range (next 14 days)
+                events, removed = _filter_events_by_date_range(events, days_ahead=14)
+
                 # Vision uses GPT-4o, roughly estimate tokens (higher cost)
                 total_tokens += len(events) * 1000  # Rough estimate
 
