@@ -15,7 +15,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 import database as db
-from scraper.models import Source, SourceStatus
+from scraper.models import Source, SourceStatus, ScrapingMode
 from scraper.pipeline import ScrapingPipeline
 
 # Load environment variables
@@ -45,6 +45,9 @@ class SourceCreate(BaseModel):
     input_url: str
     region: str = "hamburg"
     strategy: str = "weekly"
+    scraping_mode: str = "html"
+    scraping_hints: Optional[str] = None
+    custom_selectors: Optional[str] = None
 
 
 class SourceUpdate(BaseModel):
@@ -53,6 +56,9 @@ class SourceUpdate(BaseModel):
     target_url: Optional[str] = None
     is_active: Optional[bool] = None
     strategy: Optional[str] = None
+    scraping_mode: Optional[str] = None
+    scraping_hints: Optional[str] = None
+    custom_selectors: Optional[str] = None
 
 
 class EventResponse(BaseModel):
@@ -180,6 +186,9 @@ async def create_source(source: SourceCreate):
         input_url=source.input_url,
         region=source.region,
         strategy=source.strategy,
+        scraping_mode=source.scraping_mode,
+        scraping_hints=source.scraping_hints,
+        custom_selectors=source.custom_selectors,
     )
     return {
         **new_source,
@@ -239,6 +248,12 @@ async def scrape_source(source_id: str):
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
 
     # Convert to Source model
+    scraping_mode_str = source_data.get('scraping_mode', 'html')
+    try:
+        scraping_mode = ScrapingMode(scraping_mode_str)
+    except ValueError:
+        scraping_mode = ScrapingMode.HTML
+
     source = Source(
         id=source_data['id'],
         name=source_data['name'],
@@ -248,6 +263,9 @@ async def scrape_source(source_id: str):
         status=SourceStatus(source_data.get('status', 'pending')),
         strategy=source_data.get('strategy', 'weekly'),
         region=source_data.get('region', 'hamburg'),
+        scraping_mode=scraping_mode,
+        scraping_hints=source_data.get('scraping_hints'),
+        custom_selectors=None,  # TODO: Parse JSON if needed
     )
 
     # Get existing hashes for deduplication

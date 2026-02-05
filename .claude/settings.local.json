@@ -15,7 +15,13 @@
       "WebFetch(domain:www.norddeutsches-tourneetheater.de)",
       "Bash(source:*)",
       "Bash(python:*)",
-      "Bash(../.venv/Scripts/python.exe:*)"
+      "Bash(../.venv/Scripts/python.exe:*)",
+      "Bash(git ls-files:*)",
+      "Bash(./venv/Scripts/pip install:*)",
+      "Bash(./venv/Scripts/python:*)",
+      "Bash(netstat:*)",
+      "Bash(curl:*)",
+      "Bash(test:*)"
     ]
   }
 }

@@ -15,12 +15,15 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  ChevronDown,
+  ChevronUp,
+  Eye,
 } from 'lucide-react-native';
 
-import { Source } from '@/types/event';
+import { Source, ScrapingMode } from '@/types/event';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { createSource, fetchSources, scrapeSource } from '@/lib/api';
+import { createSource, fetchSources, scrapeSource, updateSource } from '@/lib/api';
 
 const StatusIcon = ({ status }: { status: Source['status'] }) => {
   const colorScheme = useColorScheme();
@@ -39,12 +42,17 @@ const StatusIcon = ({ status }: { status: Source['status'] }) => {
 interface SourceCardProps {
   source: Source;
   onScrape: (source: Source) => void;
+  onUpdate: (source: Source) => void;
   isScraping: boolean;
 }
 
-function SourceCard({ source, onScrape, isScraping }: SourceCardProps) {
+function SourceCard({ source, onScrape, onUpdate, isScraping }: SourceCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const [expanded, setExpanded] = useState(false);
+  const [editingMode, setEditingMode] = useState<ScrapingMode>(source.scrapingMode);
+  const [editingHints, setEditingHints] = useState(source.scrapingHints ?? '');
+  const [saving, setSaving] = useState(false);
 
   const formatDate = (date?: Date) => {
     if (!date) return 'Nie';
@@ -56,6 +64,24 @@ function SourceCard({ source, onScrape, isScraping }: SourceCardProps) {
     }).format(date);
   };
 
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateSource(source.id, {
+        scrapingMode: editingMode,
+        scrapingHints: editingHints || undefined,
+      });
+      onUpdate(source);
+      setExpanded(false);
+      Alert.alert('Gespeichert', 'Scraping-Einstellungen wurden aktualisiert');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Fehler beim Speichern';
+      Alert.alert('Fehler', message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <View style={[styles.sourceCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.sourceHeader}>
@@ -63,6 +89,12 @@ function SourceCard({ source, onScrape, isScraping }: SourceCardProps) {
         <Text style={[styles.sourceName, { color: colors.text }]} numberOfLines={1}>
           {source.name}
         </Text>
+        {source.scrapingMode === 'vision' && (
+          <View style={[styles.visionBadge, { backgroundColor: colors.tint + '20' }]}>
+            <Eye size={12} color={colors.tint} />
+            <Text style={[styles.visionBadgeText, { color: colors.tint }]}>Erweitert</Text>
+          </View>
+        )}
         <Pressable
           style={[
             styles.scrapeButton,
@@ -97,6 +129,104 @@ function SourceCard({ source, onScrape, isScraping }: SourceCardProps) {
         <Text style={[styles.errorText, { color: colors.error }]}>
           Fehler: {source.lastError}
         </Text>
+      )}
+
+      {/* Expandable Settings */}
+      <Pressable
+        style={styles.expandButton}
+        onPress={() => setExpanded(!expanded)}
+      >
+        <Text style={[styles.expandButtonText, { color: colors.tint }]}>
+          Scraping-Einstellungen
+        </Text>
+        {expanded ? (
+          <ChevronUp size={16} color={colors.tint} />
+        ) : (
+          <ChevronDown size={16} color={colors.tint} />
+        )}
+      </Pressable>
+
+      {expanded && (
+        <View style={[styles.expandedSection, { borderTopColor: colors.border }]}>
+          {/* Scraping Mode Toggle */}
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: colors.text }]}>Modus:</Text>
+            <View style={styles.modeToggle}>
+              <Pressable
+                style={[
+                  styles.modeButton,
+                  editingMode === 'html' && { backgroundColor: colors.tint },
+                  editingMode !== 'html' && { backgroundColor: colors.backgroundSecondary },
+                ]}
+                onPress={() => setEditingMode('html')}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    editingMode === 'html' ? { color: '#FFFFFF' } : { color: colors.text },
+                  ]}
+                >
+                  Standard
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.modeButton,
+                  editingMode === 'vision' && { backgroundColor: colors.tint },
+                  editingMode !== 'vision' && { backgroundColor: colors.backgroundSecondary },
+                ]}
+                onPress={() => setEditingMode('vision')}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    editingMode === 'vision' ? { color: '#FFFFFF' } : { color: colors.text },
+                  ]}
+                >
+                  Erweitert
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Scraping Hints */}
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: colors.text }]}>Hinweise (optional):</Text>
+            <TextInput
+              style={[
+                styles.hintsInput,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="z.B. Events in Google Sheets iFrame"
+              placeholderTextColor={colors.textSecondary}
+              value={editingHints}
+              onChangeText={setEditingHints}
+              multiline
+              numberOfLines={2}
+            />
+          </View>
+
+          {/* Save Button */}
+          <Pressable
+            style={[
+              styles.saveButton,
+              { backgroundColor: colors.tint },
+              saving && { opacity: 0.7 },
+            ]}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.saveButtonText}>Speichern</Text>
+            )}
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -243,6 +373,7 @@ export default function SourcesScreen() {
           <SourceCard
             source={item}
             onScrape={handleScrape}
+            onUpdate={() => void loadSources(true)}
             isScraping={scrapingSourceId === item.id}
           />
         )}
@@ -362,5 +493,77 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
+  },
+  visionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  visionBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  expandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  expandButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  expandedSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    gap: 12,
+  },
+  settingRow: {
+    gap: 8,
+  },
+  settingLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  hintsInput: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  saveButton: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

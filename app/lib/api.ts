@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 
-import { Event, EventCategory, Source } from '@/types/event';
+import { Event, EventCategory, Source, ScrapingMode } from '@/types/event';
 
 const DEFAULT_API_BASE_URL = 'http://72.60.80.95:8000';
 
@@ -42,6 +42,9 @@ type ApiSource = {
   last_error?: string | null;
   strategy: 'weekly' | 'monthly';
   region: string;
+  scraping_mode?: string | null;
+  scraping_hints?: string | null;
+  custom_selectors?: string | null;
 };
 
 type FetchEventsParams = {
@@ -59,6 +62,9 @@ type CreateSourcePayload = {
   inputUrl: string;
   region?: string;
   strategy?: 'weekly' | 'monthly';
+  scrapingMode?: ScrapingMode;
+  scrapingHints?: string;
+  customSelectors?: string;
 };
 
 const validCategories: EventCategory[] = [
@@ -111,6 +117,9 @@ const toSource = (source: ApiSource): Source => ({
   lastError: source.last_error ?? undefined,
   strategy: source.strategy,
   region: source.region,
+  scrapingMode: (source.scraping_mode ?? 'html') as ScrapingMode,
+  scrapingHints: source.scraping_hints ?? undefined,
+  customSelectors: source.custom_selectors ?? undefined,
 });
 
 const buildQuery = (params: Record<string, unknown>) => {
@@ -177,6 +186,33 @@ export const createSource = async (payload: CreateSourcePayload): Promise<Source
       input_url: payload.inputUrl,
       region: payload.region ?? 'hamburg',
       strategy: payload.strategy ?? 'weekly',
+      scraping_mode: payload.scrapingMode ?? 'html',
+      scraping_hints: payload.scrapingHints ?? null,
+      custom_selectors: payload.customSelectors ?? null,
+    }),
+  });
+
+  return toSource(data);
+};
+
+export const updateSource = async (
+  sourceId: string,
+  updates: Partial<{
+    name: string;
+    inputUrl: string;
+    isActive: boolean;
+    scrapingMode: ScrapingMode;
+    scrapingHints: string;
+  }>
+): Promise<Source> => {
+  const data = await request<ApiSource>(`/api/sources/${sourceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      name: updates.name,
+      input_url: updates.inputUrl,
+      is_active: updates.isActive,
+      scraping_mode: updates.scrapingMode,
+      scraping_hints: updates.scrapingHints,
     }),
   });
 

@@ -14,11 +14,12 @@ from typing import Optional
 
 from openai import OpenAI
 
-from .models import Source, Event, ScrapingResult, SourceStatus
+from .models import Source, Event, ScrapingResult, SourceStatus, ScrapingMode
 from .navigator import Navigator
 from .extractor import Extractor
 from .deduplicator import Deduplicator
 from .geocoder import Geocoder
+from .vision_scraper import extract_events_with_vision
 
 
 class ScrapingPipeline:
@@ -48,6 +49,7 @@ class ScrapingPipeline:
             existing_hashes: Optional list of existing event hashes for deduplication.
             use_playwright: Force Playwright for all requests (auto-detected by default).
         """
+        self.openai_client = openai_client
         self.navigator = Navigator(
             openai_client=openai_client,
             model=model,
@@ -87,27 +89,50 @@ class ScrapingPipeline:
         )
         
         try:
-            # Stage 1: Navigation Discovery
-            if skip_navigation and source.target_url:
-                target_url = source.target_url
-                print(f"[Pipeline] Using existing target URL: {target_url}")
+            # Check scraping mode
+            scraping_mode = source.scraping_mode if hasattr(source, 'scraping_mode') else ScrapingMode.HTML
+
+            if scraping_mode == ScrapingMode.VISION:
+                # Vision-based scraping (skip navigation)
+                print(f"[Pipeline] Using VISION mode for {source.input_url}")
+                target_url = source.target_url if source.target_url else source.input_url
+
+                # Extract events using vision
+                events = extract_events_with_vision(
+                    client=self.openai_client,
+                    url=target_url,
+                    source_id=source.id or "",
+                    region=source.region,
+                    scraping_hints=source.scraping_hints if hasattr(source, 'scraping_hints') else None,
+                )
+                # Vision uses GPT-4o, roughly estimate tokens (higher cost)
+                total_tokens += len(events) * 1000  # Rough estimate
+
             else:
-                print(f"[Pipeline] Stage 1: Discovering calendar URL for {source.input_url}")
-                target_url = self.navigator.discover(source)
-                
-                if not target_url:
-                    # Fallback: try input_url directly
-                    print(f"[Pipeline] No calendar found, trying input URL directly")
-                    target_url = source.input_url
-                
-                # Update source with discovered URL
-                source.target_url = target_url
-            
-            # Stage 2: Event Extraction
-            print(f"[Pipeline] Stage 2: Extracting events from {target_url}")
-            events = self.extractor.extract(target_url, source.name)
-            total_tokens += self.extractor.last_tokens_used
-            
+                # HTML-based scraping (original pipeline)
+                print(f"[Pipeline] Using HTML mode for {source.input_url}")
+
+                # Stage 1: Navigation Discovery
+                if skip_navigation and source.target_url:
+                    target_url = source.target_url
+                    print(f"[Pipeline] Using existing target URL: {target_url}")
+                else:
+                    print(f"[Pipeline] Stage 1: Discovering calendar URL for {source.input_url}")
+                    target_url = self.navigator.discover(source)
+
+                    if not target_url:
+                        # Fallback: try input_url directly
+                        print(f"[Pipeline] No calendar found, trying input URL directly")
+                        target_url = source.input_url
+
+                    # Update source with discovered URL
+                    source.target_url = target_url
+
+                # Stage 2: Event Extraction
+                print(f"[Pipeline] Stage 2: Extracting events from {target_url}")
+                events = self.extractor.extract(target_url, source.name)
+                total_tokens += self.extractor.last_tokens_used
+
             result.events_found = len(events)
             
             if not events:

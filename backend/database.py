@@ -43,6 +43,9 @@ def init_db(db_path: Optional[Path] = None) -> None:
             last_error TEXT,
             strategy TEXT DEFAULT 'weekly',
             region TEXT DEFAULT 'hamburg',
+            scraping_mode TEXT DEFAULT 'html',
+            scraping_hints TEXT,
+            custom_selectors TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -112,6 +115,9 @@ def create_source(
     input_url: str,
     region: str = "hamburg",
     strategy: str = "weekly",
+    scraping_mode: str = "html",
+    scraping_hints: Optional[str] = None,
+    custom_selectors: Optional[str] = None,
 ) -> dict:
     """Create a new source."""
     import uuid
@@ -120,9 +126,9 @@ def create_source(
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO sources (id, name, input_url, region, strategy)
-            VALUES (?, ?, ?, ?, ?)
-        """, (source_id, name, input_url, region, strategy))
+            INSERT INTO sources (id, name, input_url, region, strategy, scraping_mode, scraping_hints, custom_selectors)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (source_id, name, input_url, region, strategy, scraping_mode, scraping_hints, custom_selectors))
         conn.commit()
 
     return get_source(source_id)
@@ -152,7 +158,8 @@ def update_source(source_id: str, **kwargs) -> Optional[dict]:
     """Update source fields."""
     allowed_fields = {
         'name', 'input_url', 'target_url', 'is_active', 'status',
-        'last_scraped', 'last_error', 'strategy', 'region'
+        'last_scraped', 'last_error', 'strategy', 'region',
+        'scraping_mode', 'scraping_hints', 'custom_selectors'
     }
 
     updates = {k: v for k, v in kwargs.items() if k in allowed_fields}

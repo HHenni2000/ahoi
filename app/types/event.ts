@@ -26,6 +26,8 @@ export interface Event {
   region: string;
 }
 
+export type ScrapingMode = 'html' | 'vision';
+
 export interface Source {
   id: string;
   name: string;
@@ -37,6 +39,9 @@ export interface Source {
   lastError?: string;
   strategy: 'weekly' | 'monthly';
   region: string;
+  scrapingMode: ScrapingMode;
+  scrapingHints?: string;
+  customSelectors?: string; // JSON string
 }
 
 // Filter options for the feed

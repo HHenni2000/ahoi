@@ -6,7 +6,7 @@ Defines the data structures for events, sources, and scraping results.
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, Dict
 from pydantic import BaseModel, Field, HttpUrl
 
 
@@ -31,6 +31,12 @@ class ScrapingStrategy(str, Enum):
     """How often to scrape a source."""
     WEEKLY = "weekly"
     MONTHLY = "monthly"
+
+
+class ScrapingMode(str, Enum):
+    """Method to use for scraping."""
+    HTML = "html"
+    VISION = "vision"
 
 
 class Location(BaseModel):
@@ -76,6 +82,9 @@ class Source(BaseModel):
     last_error: Optional[str] = Field(None)
     strategy: ScrapingStrategy = Field(default=ScrapingStrategy.WEEKLY)
     region: str = Field(default="hamburg")
+    scraping_mode: ScrapingMode = Field(default=ScrapingMode.HTML, description="Scraping method: html or vision")
+    scraping_hints: Optional[str] = Field(None, description="Source-specific hints for improved extraction")
+    custom_selectors: Optional[Dict[str, str]] = Field(None, description="Custom CSS selectors for code-based scraping")
 
 
 class ScrapingResult(BaseModel):
