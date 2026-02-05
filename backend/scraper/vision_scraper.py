@@ -42,18 +42,21 @@ KATEGORIEN (wähle die am besten passende):
 - sport: Sportevents, Turniere, Sportkurse, Schwimmen, Klettern, Tanzkurse, Bewegungsangebote
 - market: Märkte, Flohmärkte, Festivals, Stadtteilfeste, Kinderfeste, Basare
 
-LOCATION-EXTRAKTION (WICHTIG!):
-- Extrahiere den VOLLSTÄNDIGEN Veranstaltungsort
-- Suche nach: Straße + Hausnummer, PLZ, Stadtteil
+LOCATION-EXTRAKTION (SEHR WICHTIG!):
+- Extrahiere den VOLLSTÄNDIGEN Veranstaltungsort für JEDES Event einzeln
+- Bei Tabellen/Spreadsheets: Lies die Ort/Venue/Stadt-Spalte für JEDE Zeile - verschiedene Events können verschiedene Orte haben!
+- Bei Tournee-Theatern: Jede Aufführung hat einen ANDEREN Veranstaltungsort - lies den Ort/die Stadt aus jeder Zeile
+- Suche nach: Venue-Name, Straße + Hausnummer, PLZ, Stadt, Stadtteil
 - Typische Hamburger Stadtteile: Altona, Eimsbüttel, Eppendorf, Wandsbek, Barmbek, St. Pauli, HafenCity, Blankenese, Harburg
-- Wenn nur der Venue-Name bekannt ist (z.B. "Klecks Theater"), verwende diesen als location.name
-- Wenn eine Adresse sichtbar ist, diese VOLLSTÄNDIG in location.address übernehmen
+- Wenn nur der Venue-Name bekannt ist (z.B. "Klecks Theater"), verwende diesen als location_name
+- Wenn eine Adresse sichtbar ist, diese VOLLSTÄNDIG in location_address übernehmen
+- Wenn ein Ort oder eine Stadt sichtbar ist (z.B. "Hamburg", "Kulturhaus Eppendorf"), IMMER als location_name eintragen - NIEMALS "Unbekannt" verwenden wenn irgendeine Ort-Info sichtbar ist!
 
 Wichtige Regeln:
 - Ignoriere Events die explizit für Erwachsene sind (z.B. "ab 16 Jahren", "Erwachsenenvorstellung")
 - Wenn keine Altersangabe sichtbar ist, schätze basierend auf dem Kontext
 - Preise als String formatieren (z.B. "8€", "5-10€", "Kostenlos")
-- Bei unbekannten Daten "Unbekannt" verwenden
+- Bei unbekannten Daten "Unbekannt" verwenden, AUSSER bei Location: dort immer so viel Info wie möglich extrahieren (Stadt, Venue, Adresse)
 - is_indoor: true für Indoor-Events (Theater, Museum), false für Outdoor-Events
 - Datum: Verwende das aktuelle Jahr 2026 wenn kein Jahr angegeben ist
 

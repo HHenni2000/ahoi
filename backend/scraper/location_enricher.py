@@ -175,18 +175,26 @@ REGELN:
             )
 
         needs_enrichment = [e for e in events if self._needs_enrichment(e)]
+        has_address = [e for e in events if not _is_unknown(e.location.address)]
         no_name = [e for e in events if _is_unknown(e.location.name) and _is_unknown(e.location.address)]
 
         if no_name:
             logger.warning(
-                f"[LocationEnricher] {len(no_name)} event(s) haben WEDER Name NOCH Adresse - "
-                f"Extractor hat keine Location-Infos geliefert:"
+                f"[LocationEnricher] !!! {len(no_name)} event(s) haben WEDER Name NOCH Adresse - "
+                f"Extractor hat keine Location-Infos geliefert (kann nicht angereichert werden):"
             )
             for e in no_name:
                 logger.warning(f"[LocationEnricher]   -> \"{e.title}\" (source: {e.source_id})")
 
         if not needs_enrichment:
-            logger.info(f"[LocationEnricher] Alle {len(events)} Events haben bereits eine Adresse, nichts zu tun")
+            if no_name:
+                logger.warning(
+                    f"[LocationEnricher] Kann nichts tun: {len(no_name)} Events ohne jegliche Location-Info, "
+                    f"{len(has_address)} Events haben bereits eine Adresse. "
+                    f"Problem liegt beim Extractor/Vision Scraper - Location wird nicht aus der Quelle gelesen!"
+                )
+            else:
+                logger.info(f"[LocationEnricher] Alle {len(events)} Events haben bereits eine Adresse, nichts zu tun")
             return 0
 
         logger.info(f"[LocationEnricher] {len(needs_enrichment)} von {len(events)} Events brauchen eine Adresse")
