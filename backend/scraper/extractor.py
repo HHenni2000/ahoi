@@ -217,7 +217,7 @@ class Extractor:
         """Returns the token count from the last extraction."""
         return self._last_tokens_used
     
-    def extract(self, url: str, source_name: str = "") -> list[Event]:
+    def extract(self, url: str, source_name: str = "", hints: Optional[str] = None) -> list[Event]:
         """
         Extract events from a calendar page URL.
 
@@ -228,6 +228,7 @@ class Extractor:
         Args:
             url: The calendar page URL to scrape.
             source_name: Name of the source (for context).
+            hints: Optional source-specific hints for extraction.
 
         Returns:
             List of extracted Event objects.
@@ -264,7 +265,7 @@ class Extractor:
             print(f"[Extractor] Using LLM extraction for {url}")
             markdown_content = self._html_to_markdown(expanded_html)
             link_list = self._extract_links(expanded_html, url)
-            events = self._extract_via_llm(markdown_content, url, source_name, link_list)
+            events = self._extract_via_llm(markdown_content, url, source_name, link_list, hints)
 
             # Fallback: try Playwright if no events and not already using it
             if (
@@ -285,7 +286,7 @@ class Extractor:
                         markdown_content = self._html_to_markdown(expanded_html)
                         link_list = self._extract_links(expanded_html, url)
                         events = self._extract_via_llm(
-                            markdown_content, url, source_name, link_list
+                            markdown_content, url, source_name, link_list, hints
                         )
 
             print(f"[Extractor] Found {len(events)} events from {url}")
@@ -694,22 +695,29 @@ class Extractor:
         source_url: str,
         source_name: str = "",
         link_list: Optional[str] = None,
+        hints: Optional[str] = None,
     ) -> list[Event]:
         """
         Use LLM to extract events from markdown content.
+        Can be guided by source-specific hints.
         """
+        # Add hints to system prompt if provided
+        system_prompt = EXTRACTION_SYSTEM_PROMPT
+        if hints:
+            system_prompt += f"\n\nQUELLEN-SPEZIFISCHE HINWEISE:\n{hints}\n\nBitte beachte diese Hinweise bei der Extraktion!"
+
         user_prompt = EXTRACTION_USER_PROMPT.format(
             content=content,
             source_url=source_url,
             source_name=source_name or "Unbekannt",
             link_list=link_list or "Keine Links gefunden.",
         )
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 max_tokens=16000,  # Increased from 4000

@@ -130,7 +130,8 @@ class ScrapingPipeline:
 
                 # Stage 2: Event Extraction
                 print(f"[Pipeline] Stage 2: Extracting events from {target_url}")
-                events = self.extractor.extract(target_url, source.name)
+                hints = source.scraping_hints if hasattr(source, 'scraping_hints') else None
+                events = self.extractor.extract(target_url, source.name, hints)
                 total_tokens += self.extractor.last_tokens_used
 
             result.events_found = len(events)

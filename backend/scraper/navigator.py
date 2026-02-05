@@ -114,10 +114,10 @@ class Navigator:
     def discover(self, source: Source) -> Optional[str]:
         """
         Discover the event calendar URL for a source.
-        
+
         Args:
             source: The source to analyze.
-            
+
         Returns:
             The discovered calendar URL, or None if not found.
         """
@@ -127,26 +127,32 @@ class Navigator:
             if not html:
                 self.logger.warning("No HTML fetched for %s", source.input_url)
                 return None
-            
+
+            # Get hints if available
+            hints = source.scraping_hints if hasattr(source, 'scraping_hints') else None
+            if hints:
+                print(f"[Navigator] Using hints: {hints[:100]}...")
+                self.logger.info("Navigator using hints: %s", hints[:100])
+
             # Attempt A: Regex-based discovery
-            target_url = self._discover_via_regex(html, source.input_url)
+            target_url = self._discover_via_regex(html, source.input_url, hints)
             if target_url:
                 print(f"[Navigator] Found via regex: {target_url}")
                 self.logger.info("Navigator regex selected: %s", target_url)
                 return target_url
-            
+
             # Attempt B: LLM fallback
             if self.client:
-                target_url = self._discover_via_llm(html, source.input_url)
+                target_url = self._discover_via_llm(html, source.input_url, hints)
                 if target_url:
                     print(f"[Navigator] Found via LLM: {target_url}")
                     self.logger.info("Navigator LLM selected: %s", target_url)
                     return target_url
-            
+
             print(f"[Navigator] No calendar URL found for {source.input_url}")
             self.logger.warning("No calendar URL found for %s", source.input_url)
             return None
-            
+
         except Exception as e:
             print(f"[Navigator] Error discovering URL: {e}")
             self.logger.exception("Navigator error for %s", source.input_url)
@@ -227,11 +233,12 @@ class Navigator:
             self.logger.warning("Playwright failed for %s: %s", url, e)
             return None
     
-    def _discover_via_regex(self, html: str, base_url: str) -> Optional[str]:
+    def _discover_via_regex(self, html: str, base_url: str, hints: Optional[str] = None) -> Optional[str]:
         """
         Attempt A: Find calendar URL using regex pattern matching.
-        
+
         Looks for <a> tags where href or link text contains calendar keywords.
+        Can be guided by source-specific hints.
         """
         soup = BeautifulSoup(html, "lxml")
         
@@ -299,20 +306,21 @@ class Navigator:
             return None
         return best_url
     
-    def _discover_via_llm(self, html: str, base_url: str) -> Optional[str]:
+    def _discover_via_llm(self, html: str, base_url: str, hints: Optional[str] = None) -> Optional[str]:
         """
         Attempt B: Use LLM to identify the calendar URL.
-        
+
         Sends only navigation-relevant HTML to minimize tokens.
+        Can be guided by source-specific hints.
         """
         soup = BeautifulSoup(html, "lxml")
-        
+
         # Extract only navigation-relevant elements
         nav_elements = []
         for tag in ["nav", "header", "footer", "menu"]:
             for element in soup.find_all(tag):
                 nav_elements.append(str(element))
-        
+
         # If no nav elements found, extract all links
         if not nav_elements:
             links = []
@@ -324,21 +332,32 @@ class Navigator:
             nav_html = "\n".join(links[:50])  # Limit to 50 links
         else:
             nav_html = "\n".join(nav_elements)
-        
+
         # Truncate if too long
         if len(nav_html) > 8000:
             nav_html = nav_html[:8000] + "..."
-        
+
+        # Build prompt with optional hints
+        hints_section = ""
+        if hints:
+            hints_section = f"""
+
+Source-specific navigation hints:
+{hints}
+
+IMPORTANT: Follow these hints carefully when selecting the calendar URL!
+"""
+
         prompt = f"""Analyze this website's navigation HTML and identify the URL that leads to the event calendar, schedule, or specific performance dates page.
 
 Base URL: {base_url}
 
 Navigation HTML:
-{nav_html}
+{nav_html}{hints_section}
 
 Instructions:
-1. Prefer links that contain concrete dates or words like: Spielplan, Termine, Kalender, Vorstellungen, Auff?hrungen
-2. Avoid links that look like repertoire/overview pages (e.g., St?cke, Repertoire, Produktionen, Ensemble)
+1. Prefer links that contain concrete dates or words like: Spielplan, Termine, Kalender, Vorstellungen, Aufführungen
+2. Avoid links that look like repertoire/overview pages (e.g., Stücke, Repertoire, Produktionen, Ensemble)
 3. Avoid ticket/shop pages (Tickets, Online-Tickets, Shop, Kasse)
 4. Return ONLY the full URL (absolute, not relative)
 5. If you can't find a calendar URL, respond with: NONE
