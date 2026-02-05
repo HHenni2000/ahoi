@@ -134,15 +134,23 @@ class Navigator:
                 print(f"[Navigator] Using hints: {hints[:100]}...")
                 self.logger.info("Navigator using hints: %s", hints[:100])
 
-            # Attempt A: Regex-based discovery
+            # If hints are provided, prefer LLM navigation (more accurate)
+            if hints and self.client:
+                target_url = self._discover_via_llm(html, source.input_url, hints)
+                if target_url:
+                    print(f"[Navigator] Found via LLM (with hints): {target_url}")
+                    self.logger.info("Navigator LLM selected (with hints): %s", target_url)
+                    return target_url
+
+            # Attempt A: Regex-based discovery (only if no hints or LLM failed)
             target_url = self._discover_via_regex(html, source.input_url, hints)
             if target_url:
                 print(f"[Navigator] Found via regex: {target_url}")
                 self.logger.info("Navigator regex selected: %s", target_url)
                 return target_url
 
-            # Attempt B: LLM fallback
-            if self.client:
+            # Attempt B: LLM fallback (if regex also failed)
+            if self.client and not hints:  # Only if we haven't tried LLM yet
                 target_url = self._discover_via_llm(html, source.input_url, hints)
                 if target_url:
                     print(f"[Navigator] Found via LLM: {target_url}")
