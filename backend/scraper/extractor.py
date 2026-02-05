@@ -12,7 +12,8 @@ Strategy:
 
 import json
 import os
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
@@ -548,16 +549,137 @@ class Extractor:
         # Clean up excessive whitespace
         lines = [line.strip() for line in markdown.split("\n")]
         markdown = "\n".join(line for line in lines if line)
-        
-        # Truncate if too long
+
+        # Filter by date range (next 14 days) to reduce tokens
+        markdown = self._filter_markdown_by_date(markdown, days_ahead=14)
+
+        # Truncate if too long (should be rare now after date filtering)
+        original_length = len(markdown)
         if len(markdown) > self.max_content_length:
             markdown = markdown[:self.max_content_length] + "\n\n[... Content truncated ...]"
+            print(f"[Extractor] ⚠️ Content truncated: {original_length} chars → {self.max_content_length} chars ({original_length - self.max_content_length} chars lost)")
+            self.logger.warning("Content truncated from %s to %s chars", original_length, self.max_content_length)
 
         if is_debug():
             self.logger.debug("Markdown length: %s chars", len(markdown))
 
         return markdown
-    
+
+    def _filter_markdown_by_date(self, markdown: str, days_ahead: int = 14) -> str:
+        """
+        Filter markdown content to only include events within the next X days.
+
+        Looks for German date patterns and keeps surrounding context.
+        This drastically reduces token usage by removing past/far-future events.
+
+        Args:
+            markdown: The markdown content to filter
+            days_ahead: Number of days into the future to keep (default: 14)
+
+        Returns:
+            Filtered markdown with only relevant dates
+        """
+        today = datetime.now().date()
+        cutoff_date = today + timedelta(days=days_ahead)
+
+        # German month names mapping
+        month_names_de = {
+            'januar': 1, 'jan': 1,
+            'februar': 2, 'feb': 2,
+            'märz': 3, 'maerz': 3, 'mrz': 3,
+            'april': 4, 'apr': 4,
+            'mai': 5,
+            'juni': 6, 'jun': 6,
+            'juli': 7, 'jul': 7,
+            'august': 8, 'aug': 8,
+            'september': 9, 'sep': 9, 'sept': 9,
+            'oktober': 10, 'okt': 10,
+            'november': 11, 'nov': 11,
+            'dezember': 12, 'dez': 12,
+        }
+
+        def extract_date_from_line(line: str) -> Optional[datetime]:
+            """Try to extract a date from a line of text."""
+            line_lower = line.lower()
+
+            # Pattern 1: DD.MM.YYYY (05.02.2026)
+            match = re.search(r'\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b', line)
+            if match:
+                try:
+                    day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                    return datetime(year, month, day).date()
+                except ValueError:
+                    pass
+
+            # Pattern 2: DD.MM. (05.02.) - assume current/next year
+            match = re.search(r'\b(\d{1,2})\.(\d{1,2})\.\b', line)
+            if match:
+                try:
+                    day, month = int(match.group(1)), int(match.group(2))
+                    year = today.year
+                    date = datetime(year, month, day).date()
+                    # If date is more than 2 months in the past, try next year
+                    if (today - date).days > 60:
+                        date = datetime(year + 1, month, day).date()
+                    return date
+                except ValueError:
+                    pass
+
+            # Pattern 3: "D. Monat" format (5. Februar)
+            for month_name, month_num in month_names_de.items():
+                pattern = rf'\b(\d{{1,2}})\.\s*{month_name}\b'
+                match = re.search(pattern, line_lower)
+                if match:
+                    try:
+                        day = int(match.group(1))
+                        year = today.year
+                        date = datetime(year, month_num, day).date()
+                        # If date is more than 2 months in the past, try next year
+                        if (today - date).days > 60:
+                            date = datetime(year + 1, month_num, day).date()
+                        return date
+                    except ValueError:
+                        pass
+
+            return None
+
+        lines = markdown.split('\n')
+        relevant_indices = set()
+
+        # First pass: find lines with relevant dates
+        for i, line in enumerate(lines):
+            date = extract_date_from_line(line)
+            if date and today <= date <= cutoff_date:
+                # Keep this line and surrounding context
+                context_before = 3  # Keep 3 lines before (title, description, etc.)
+                context_after = 5   # Keep 5 lines after (time, location, etc.)
+
+                for j in range(max(0, i - context_before), min(len(lines), i + context_after + 1)):
+                    relevant_indices.add(j)
+
+        # If no relevant dates found, return original (don't break scraping)
+        if not relevant_indices:
+            print(f"[Extractor] ⚠️ No dates found in range (next {days_ahead} days), keeping all content")
+            return markdown
+
+        # Second pass: keep relevant lines
+        filtered_lines = []
+        for i, line in enumerate(lines):
+            if i in relevant_indices:
+                filtered_lines.append(line)
+
+        filtered_markdown = '\n'.join(filtered_lines)
+
+        original_length = len(markdown)
+        filtered_length = len(filtered_markdown)
+        saved = original_length - filtered_length
+
+        if saved > 0:
+            print(f"[Extractor] 📅 Date filtering: {original_length} chars → {filtered_length} chars ({saved} chars removed, {int(saved/original_length*100)}% saved)")
+            self.logger.info("Date filtering saved %s chars (%s%%)", saved, int(saved/original_length*100))
+
+        return filtered_markdown
+
     def _enrich_structured_events(
         self,
         raw_events: list[RawEvent],
