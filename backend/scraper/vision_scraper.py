@@ -29,9 +29,10 @@ logger = get_logger(__name__)
 VISION_EXTRACTION_SYSTEM_PROMPT = """Du bist ein Experte für die Extraktion von Veranstaltungsdaten aus Screenshots von Webseiten für Familien in Hamburg.
 
 Deine Aufgabe:
-1. Analysiere den Screenshot und extrahiere ALLE sichtbaren Veranstaltungen
+1. Analysiere den Screenshot und extrahiere Veranstaltungen der NÄCHSTEN 14 TAGE
 2. Filtere NUR familienfreundliche Events, die für Kinder ab 4 Jahren geeignet sind
 3. Kategorisiere jedes Event PRÄZISE nach dem Hauptinhalt
+4. WICHTIG: Extrahiere maximal 30 Events um die Response-Länge zu begrenzen
 
 KATEGORIEN (wähle die am besten passende):
 - theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, Lesungen mit Schauspiel
@@ -79,12 +80,17 @@ Wichtig: Gib die Antwort als JSON-Array zurück:
 
 def _create_user_prompt(url: str, scraping_hints: Optional[str] = None) -> str:
     """Create user prompt for vision extraction."""
+    # Add dynamic date range (next 14 days)
+    today = datetime.now().date()
+    cutoff_date = today + timedelta(days=14)
+
     prompt = f"Analysiere diesen Screenshot der Webseite: {url}\n\n"
+    prompt += f"WICHTIG: Heute ist der {today.strftime('%d.%m.%Y')}. Extrahiere NUR Events vom {today.strftime('%d.%m.%Y')} bis {cutoff_date.strftime('%d.%m.%Y')} (nächste 14 Tage).\n\n"
 
     if scraping_hints:
         prompt += f"Spezifische Hinweise für diese Quelle:\n{scraping_hints}\n\n"
 
-    prompt += "Extrahiere ALLE sichtbaren familienfreundlichen Veranstaltungen (ab 4 Jahren) und gib sie als JSON-Array zurück."
+    prompt += "Extrahiere familienfreundliche Veranstaltungen (ab 4 Jahren) innerhalb dieses Zeitraums und gib sie als JSON-Array zurück."
 
     return prompt
 
@@ -206,7 +212,7 @@ def _extract_events_from_vision(
                 },
             ],
             temperature=0.1,
-            max_tokens=4000,
+            max_tokens=8000,  # Increased for longer event lists (e.g., Google Sheets)
         )
 
         # Parse response
