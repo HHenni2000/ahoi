@@ -538,13 +538,26 @@ class Extractor:
         
         # Use main content if found, otherwise use body
         content_html = str(main_content) if main_content else str(soup.body or soup)
-        
+
+        # Debug: Log which selector was used
+        if main_content:
+            selector_used = main_content.name + (f".{main_content.get('class')}" if main_content.get('class') else "")
+            print(f"[Extractor] 🔍 Using main content selector: {selector_used}")
+            self.logger.info("Using main content: %s", selector_used)
+        else:
+            print(f"[Extractor] 🔍 Using full body (no main content found)")
+            self.logger.info("Using full body for conversion")
+
+        print(f"[Extractor] 📄 HTML content: {len(content_html)} chars")
+
         # Convert to markdown
         markdown = md(
             content_html,
             heading_style="ATX",
             bullets="-",
         )
+
+        print(f"[Extractor] 📝 Markdown (before cleanup): {len(markdown)} chars")
         
         # Clean up excessive whitespace
         lines = [line.strip() for line in markdown.split("\n")]
