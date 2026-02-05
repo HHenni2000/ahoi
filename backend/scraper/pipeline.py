@@ -4,9 +4,11 @@ Scraping Pipeline
 Orchestrates the full scraping workflow:
 1. Navigation Discovery (find calendar URL)
 2. Event Extraction (extract events via LLM)
-3. Deduplication (remove duplicates)
+3. Location Enrichment (fill missing addresses)
+4. Deduplication (remove duplicates)
+5. Geocoding (lat/lng coordinates)
 
-This module ties together Navigator, Extractor, and Deduplicator.
+This module ties together Navigator, Extractor, LocationEnricher, Deduplicator, and Geocoder.
 """
 
 import time
@@ -20,6 +22,7 @@ from .navigator import Navigator
 from .extractor import Extractor
 from .deduplicator import Deduplicator
 from .geocoder import Geocoder
+from .location_enricher import LocationEnricher
 from .vision_scraper import extract_events_with_vision
 
 
@@ -95,6 +98,10 @@ class ScrapingPipeline:
             use_playwright=use_playwright,
         )
         self.deduplicator = Deduplicator()
+        self.location_enricher = LocationEnricher(
+            openai_client=openai_client,
+            model=model,
+        )
         self.geocoder = Geocoder(enabled=enable_geocoding)
 
         if existing_hashes:
@@ -173,22 +180,28 @@ class ScrapingPipeline:
                 total_tokens += self.extractor.last_tokens_used
 
             result.events_found = len(events)
-            
+
             if not events:
                 result.success = True
                 result.tokens_used = total_tokens
                 result.duration_seconds = time.time() - start_time
                 return result, []
-            
-            # Stage 3: Deduplication
-            print(f"[Pipeline] Stage 3: Deduplicating {len(events)} events")
+
+            # Stage 3: Location Enrichment (fill missing addresses)
+            print(f"[Pipeline] Stage 3: Enriching locations for {len(events)} events")
+            location_enriched = self.location_enricher.enrich_events(events)
+            if location_enriched:
+                print(f"[Pipeline] Enriched {location_enriched} events with addresses")
+
+            # Stage 4: Deduplication
+            print(f"[Pipeline] Stage 4: Deduplicating {len(events)} events")
             new_events, duplicates = self.deduplicator.process_events(events)
-            
+
             # Set source_id on all new events
             for event in new_events:
                 event.source_id = source.id
 
-            # Enrich events with geocoding (best-effort)
+            # Stage 5: Geocoding (best-effort)
             geocoded = self.geocoder.enrich_events(new_events)
             if geocoded:
                 print(f"[Pipeline] Geocoded {geocoded} events")
