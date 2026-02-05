@@ -352,10 +352,21 @@ class Extractor:
                     )
                     try:
                         page.goto(url, wait_until="networkidle", timeout=30000)
-                        page.wait_for_timeout(2000)
+
+                        # Wait for dynamic content to load (AJAX)
+                        page.wait_for_timeout(3000)
+
+                        # Scroll to trigger lazy loading
                         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        page.wait_for_timeout(2000)
+
+                        # Scroll back up
+                        page.evaluate("window.scrollTo(0, 0)")
                         page.wait_for_timeout(1000)
-                        return page.content()
+
+                        html = page.content()
+                        print(f"[Extractor] Playwright fetched {len(html)} bytes, found {html.count('<article')} <article> tags")
+                        return html
                     finally:
                         page.close()
                 finally:
@@ -532,6 +543,11 @@ class Extractor:
         
         # Find main content area if possible
         main_content = None
+
+        # Debug: Check for various event container patterns
+        article_count = len(soup.find_all("article"))
+        div_event_count = len(soup.find_all("div", class_=lambda c: c and ("event" in str(c).lower() or "termin" in str(c).lower())))
+        print(f"[Extractor] 🔍 HTML analysis: {article_count} <article> tags, {div_event_count} event/termin divs")
 
         # Special case: If there are multiple <article> tags (calendar/event list), use all of them
         articles = soup.find_all("article")
