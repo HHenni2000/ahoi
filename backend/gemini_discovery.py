@@ -25,7 +25,7 @@ from scraper.models import Event, EventCategory, Location
 
 
 GEMINI_ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 HAMBURG_TIMEZONE = ZoneInfo("Europe/Berlin")
 GEMINI_DISCOVERY_SOURCE_NAME = "Gemini Discovery"
 GEMINI_DISCOVERY_INPUT_URL = "manual://gemini-discovery"

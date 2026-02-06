@@ -660,7 +660,10 @@ async def gemini_discovery(payload: GeminiDiscoveryRequest):
             "events_saved": 0,
             "events_dropped": 0,
             "error_message": discovery.get("error_message"),
-            "model": str(discovery.get("model") or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash")),
+            "model": str(
+                discovery.get("model")
+                or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview")
+            ),
             "events": [],
         }
 
@@ -685,7 +688,10 @@ async def gemini_discovery(payload: GeminiDiscoveryRequest):
         "events_saved": len(saved_events),
         "events_dropped": max(raw_found - len(saved_events), 0),
         "error_message": None,
-        "model": str(discovery.get("model") or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash")),
+        "model": str(
+            discovery.get("model")
+            or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview")
+        ),
         "events": saved_events,
     }
 
