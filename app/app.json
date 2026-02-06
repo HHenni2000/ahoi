@@ -1,20 +1,31 @@
 {
   "expo": {
-    "name": "app",
-    "slug": "app",
+    "name": "ahhoi",
+    "slug": "ahhoi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "app",
+    "scheme": "ahhoi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/728eda13-ca1e-4ead-9bc1-1e6f4fedf66b"
+    },
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kotoro.ahoi",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,13 +41,18 @@
       "favicon": "./assets/images/favicon.png"
     },
     "extra": {
-      "apiBaseUrl": "http://72.60.80.95:8000"
+      "apiBaseUrl": "http://72.60.80.95:8000",
+      "router": {},
+      "eas": {
+        "projectId": "728eda13-ca1e-4ead-9bc1-1e6f4fedf66b"
+      }
     },
     "plugins": [
       "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "hhenni"
   }
 }
