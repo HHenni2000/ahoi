@@ -373,30 +373,36 @@ export default function SourcesScreen() {
               <Text style={styles.discoveryButtonText}>Gemini Discovery starten</Text>
             )}
           </Pressable>
-          {lastGeminiRun && (
-            <View style={[styles.trackingCard, { borderColor: colors.border }]}>
-              <Text style={[styles.trackingTitle, { color: colors.text }]}>Letzter Tracking-Lauf</Text>
+          <View style={[styles.trackingCard, { borderColor: colors.border }]}>
+            <Text style={[styles.trackingTitle, { color: colors.text }]}>Letzter Tracking-Lauf</Text>
+            {lastGeminiRun ? (
+              <>
+                <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
+                  Stage 1 Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw,{' '}
+                  {lastGeminiRun.stages.search.groundingUrlCount} Quellen
+                </Text>
+                <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
+                  Stage 2 Normalisierung: {lastGeminiRun.stages.normalization.eventsNormalized} normalisiert,{' '}
+                  {lastGeminiRun.stages.normalization.eventsDroppedValidation} verworfen
+                </Text>
+                <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
+                  Stage 3 Persistenz: {lastGeminiRun.stages.persistence.eventsSaved} gespeichert,{' '}
+                  {lastGeminiRun.stages.persistence.eventsNew} neu,{' '}
+                  {lastGeminiRun.stages.persistence.eventsExisting} bereits vorhanden
+                </Text>
+              </>
+            ) : (
               <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                Stage 1 Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw,{' '}
-                {lastGeminiRun.stages.search.groundingUrlCount} Quellen
+                Noch kein Discovery-Lauf vorhanden.
               </Text>
-              <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                Stage 2 Normalisierung: {lastGeminiRun.stages.normalization.eventsNormalized} normalisiert,{' '}
-                {lastGeminiRun.stages.normalization.eventsDroppedValidation} verworfen
-              </Text>
-              <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                Stage 3 Persistenz: {lastGeminiRun.stages.persistence.eventsSaved} gespeichert,{' '}
-                {lastGeminiRun.stages.persistence.eventsNew} neu,{' '}
-                {lastGeminiRun.stages.persistence.eventsExisting} bereits vorhanden
-              </Text>
-              <Pressable
-                style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={handleShowGeminiTracking}
-              >
-                <Text style={[styles.trackingButtonText, { color: colors.text }]}>Tracking Details anzeigen</Text>
-              </Pressable>
-            </View>
-          )}
+            )}
+            <Pressable
+              style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
+              onPress={handleShowGeminiTracking}
+            >
+              <Text style={[styles.trackingButtonText, { color: colors.text }]}>Tracking Details anzeigen</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.toggleRow}>
