@@ -29,6 +29,8 @@ DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 HAMBURG_TIMEZONE = ZoneInfo("Europe/Berlin")
 GEMINI_DISCOVERY_SOURCE_NAME = "Gemini Discovery"
 GEMINI_DISCOVERY_INPUT_URL = "manual://gemini-discovery"
+DEFAULT_GEMINI_TIMEOUT_SECONDS = 90.0
+DEFAULT_GEMINI_RETRY_COUNT = 1
 
 ALLOWED_CATEGORIES = {
     "theater",
@@ -93,6 +95,28 @@ def _normalize_hash_component(value: Optional[str]) -> str:
     for char in [".", ",", "!", "?", ":", ";", "-", "–", "—", "'", '"']:
         normalized = normalized.replace(char, "")
     return normalized
+
+
+def _read_positive_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+        return value if value > 0 else default
+    except ValueError:
+        return default
+
+
+def _read_non_negative_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+        return value if value >= 0 else default
+    except ValueError:
+        return default
 
 
 def _extract_events_list(data: Any) -> list[dict[str, Any]]:
@@ -394,6 +418,10 @@ def discover_events(
 ) -> dict[str, Any]:
     api_key = os.getenv("GEMINI_API_KEY")
     model_name = model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+    timeout_seconds = _read_positive_float_env(
+        "GEMINI_TIMEOUT_SECONDS", DEFAULT_GEMINI_TIMEOUT_SECONDS
+    )
+    retry_count = _read_non_negative_int_env("GEMINI_RETRY_COUNT", DEFAULT_GEMINI_RETRY_COUNT)
 
     if not api_key:
         return {
@@ -432,16 +460,29 @@ def discover_events(
     endpoint = GEMINI_ENDPOINT_TEMPLATE.format(model=model_name)
 
     try:
-        response = httpx.post(
-            endpoint,
-            params={"key": api_key},
-            json=request_body,
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        text = _extract_text_from_payload(payload)
-        parsed = _parse_json_text(text)
+        parsed: dict[str, Any] | None = None
+        for attempt in range(retry_count + 1):
+            try:
+                response = httpx.post(
+                    endpoint,
+                    params={"key": api_key},
+                    json=request_body,
+                    timeout=httpx.Timeout(timeout_seconds, connect=min(timeout_seconds, 20.0)),
+                )
+                response.raise_for_status()
+                payload = response.json()
+                text = _extract_text_from_payload(payload)
+                parsed = _parse_json_text(text)
+                break
+            except httpx.TimeoutException as exc:
+                if attempt >= retry_count:
+                    raise RuntimeError(
+                        f"Gemini request timed out after {timeout_seconds:.0f}s "
+                        f"(retries={retry_count}): {exc}"
+                    ) from exc
+                continue
+        if parsed is None:
+            raise RuntimeError("Gemini response parsing failed after retries")
     except httpx.HTTPStatusError as exc:
         detail = ""
         try:
