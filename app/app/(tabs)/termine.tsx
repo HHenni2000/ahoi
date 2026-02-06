@@ -1,29 +1,21 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-import { EventCard } from '@/components/EventCard';
-import { Event, EventCategory } from '@/types/event';
 import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { fetchEvents } from '@/lib/api';
+import { IdeaCard } from '@/components/IdeaCard';
+import { fetchIdeas } from '@/lib/api';
+import { EventCategory, Idea } from '@/types/event';
 
-type DateFilter = 'all' | 'today' | 'weekend' | 'week';
-
-const DATE_FILTERS: { key: DateFilter; label: string }[] = [
-  { key: 'all', label: 'Alle' },
-  { key: 'today', label: 'Heute' },
-  { key: 'weekend', label: 'Wochenende' },
-  { key: 'week', label: 'Diese Woche' },
-];
+type PlaceFilter = 'all' | 'indoor' | 'outdoor';
 
 const CATEGORY_FILTERS: { key: EventCategory | 'all'; label: string }[] = [
   { key: 'all', label: 'Alle' },
@@ -37,70 +29,43 @@ const CATEGORY_FILTERS: { key: EventCategory | 'all'; label: string }[] = [
   { key: 'lesen', label: 'Lesen' },
 ];
 
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const endOfDay = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-const addDays = (date: Date, amount: number) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
+const PLACE_FILTERS: { key: PlaceFilter; label: string }[] = [
+  { key: 'all', label: 'Indoor + Outdoor' },
+  { key: 'indoor', label: 'Nur Indoor' },
+  { key: 'outdoor', label: 'Nur Outdoor' },
+];
 
-const getDateRange = (filter: DateFilter) => {
-  const now = new Date();
-
-  if (filter === 'today') {
-    return { fromDate: startOfDay(now), toDate: endOfDay(now) };
-  }
-
-  if (filter === 'week') {
-    const day = now.getDay();
-    const daysUntilSunday = (7 - day) % 7;
-    return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, daysUntilSunday)) };
-  }
-
-  if (filter === 'weekend') {
-    const day = now.getDay();
-    if (day === 0) {
-      return { fromDate: startOfDay(addDays(now, -1)), toDate: endOfDay(now) };
-    }
-    if (day === 6) {
-      return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, 1)) };
-    }
-    const daysUntilSaturday = (6 - day + 7) % 7;
-    const saturday = addDays(now, daysUntilSaturday);
-    return { fromDate: startOfDay(saturday), toDate: endOfDay(addDays(saturday, 1)) };
-  }
-
-  return { fromDate: undefined, toDate: undefined };
-};
-
-export default function TermineScreen() {
+export default function IdeasTabScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const [events, setEvents] = useState<Event[]>([]);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<EventCategory | 'all'>('all');
+  const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('all');
 
-  const loadEvents = useCallback(
+  const hasCustomFilters = useMemo(
+    () => categoryFilter !== 'all' || placeFilter !== 'all',
+    [categoryFilter, placeFilter]
+  );
+
+  const loadIdeas = useCallback(
     async (showSpinner = false) => {
       if (showSpinner) {
         setLoading(true);
       }
       setErrorMessage(null);
-
       try {
-        const { fromDate, toDate } = getDateRange(dateFilter);
-        const data = await fetchEvents({
+        const data = await fetchIdeas({
           category: categoryFilter !== 'all' ? categoryFilter : undefined,
-          fromDate: fromDate ? fromDate.toISOString() : undefined,
-          toDate: toDate ? toDate.toISOString() : undefined,
+          isIndoor: placeFilter === 'all' ? undefined : placeFilter === 'indoor',
         });
-        setEvents(data);
+        setIdeas(data);
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Termine konnten nicht geladen werden.';
+          error instanceof Error ? error.message : 'Ideen konnten nicht geladen werden.';
         setErrorMessage(message);
       } finally {
         setRefreshing(false);
@@ -109,42 +74,32 @@ export default function TermineScreen() {
         }
       }
     },
-    [categoryFilter, dateFilter]
+    [categoryFilter, placeFilter]
   );
 
   useEffect(() => {
-    loadEvents(true);
-  }, [loadEvents]);
+    loadIdeas(true);
+  }, [loadIdeas]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadEvents();
-  };
-
-  const renderFilterChip = (
+  const renderPill = (
     key: string,
     label: string,
     isSelected: boolean,
     onPress: () => void,
-    color?: string
+    selectedColor?: string
   ) => (
     <Pressable
       key={key}
       style={[
-        styles.filterChip,
+        styles.pill,
         {
-          backgroundColor: isSelected ? color || colors.tint : colors.backgroundSecondary,
-          borderColor: isSelected ? color || colors.tint : colors.border,
+          borderColor: isSelected ? selectedColor || '#2E8B57' : colors.border,
+          backgroundColor: isSelected ? selectedColor || '#2E8B57' : colors.background,
         },
       ]}
       onPress={onPress}
     >
-      <Text
-        style={[
-          styles.filterChipText,
-          { color: isSelected ? '#FFFFFF' : colors.textSecondary },
-        ]}
-      >
+      <Text style={[styles.pillText, { color: isSelected ? '#FFFFFF' : colors.textSecondary }]}>
         {label}
       </Text>
     </Pressable>
@@ -152,44 +107,87 @@ export default function TermineScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.filterSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {DATE_FILTERS.map((filter) =>
-            renderFilterChip(
-              filter.key,
-              filter.label,
-              dateFilter === filter.key,
-              () => setDateFilter(filter.key)
-            )
-          )}
-        </ScrollView>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {CATEGORY_FILTERS.map((filter) =>
-            renderFilterChip(
-              filter.key,
-              filter.label,
-              categoryFilter === filter.key,
-              () => setCategoryFilter(filter.key),
-              filter.key !== 'all' ? CategoryColors[filter.key as EventCategory] : undefined
-            )
-          )}
-        </ScrollView>
-      </View>
-
       <FlatList
-        data={events}
-        renderItem={({ item }) => <EventCard event={item} />}
+        data={ideas}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <IdeaCard idea={item} />}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void loadIdeas();
+            }}
+            tintColor={colors.tint}
+          />
+        }
+        ListHeaderComponent={
+          <View style={styles.headerWrap}>
+            <View
+              style={[
+                styles.hero,
+                { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.heroTitle, { color: colors.text }]}>Ideen</Text>
+              <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
+                Orte und Aktivitaeten ohne festen Termin.
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.filterCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <View style={styles.filterBlock}>
+                <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Kategorie</Text>
+                <View style={styles.pillsWrap}>
+                  {CATEGORY_FILTERS.map((filter) =>
+                    renderPill(
+                      filter.key,
+                      filter.label,
+                      categoryFilter === filter.key,
+                      () => setCategoryFilter(filter.key),
+                      filter.key !== 'all' ? CategoryColors[filter.key as EventCategory] : undefined
+                    )
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.filterBlock}>
+                <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Ortstyp</Text>
+                <View style={styles.pillsWrap}>
+                  {PLACE_FILTERS.map((filter) =>
+                    renderPill(
+                      filter.key,
+                      filter.label,
+                      placeFilter === filter.key,
+                      () => setPlaceFilter(filter.key)
+                    )
+                  )}
+                </View>
+              </View>
+
+              <View style={[styles.resultRow, { borderTopColor: colors.border }]}>
+                <Text style={[styles.resultText, { color: colors.textSecondary }]}>
+                  {ideas.length} Treffer
+                </Text>
+                {hasCustomFilters && (
+                  <Pressable
+                    onPress={() => {
+                      setCategoryFilter('all');
+                      setPlaceFilter('all');
+                    }}
+                    style={[styles.resetButton, { borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Filter zuruecksetzen</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -197,9 +195,7 @@ export default function TermineScreen() {
               <ActivityIndicator size="large" color={colors.tint} />
             ) : (
               <>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  Keine Termine gefunden
-                </Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Keine Ideen gefunden</Text>
                 {errorMessage && (
                   <Text style={[styles.errorText, { color: colors.error }]}>{errorMessage}</Text>
                 )}
@@ -217,35 +213,91 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  filterSection: {
-    paddingVertical: 8,
-    gap: 8,
-  },
-  filterRow: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  filterChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
   listContent: {
-    paddingBottom: 16,
+    paddingBottom: 20,
+  },
+  headerWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 12,
+    marginBottom: 8,
+  },
+  hero: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  filterCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  filterBlock: {
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  pillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  resultRow: {
+    borderTopWidth: 1,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  resultText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  resetButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  resetButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   emptyState: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 100,
+    paddingTop: 80,
+    paddingHorizontal: 24,
   },
   emptyText: {
     fontSize: 16,
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 12,

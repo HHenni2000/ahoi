@@ -94,6 +94,7 @@ type FetchEventsParams = {
   fromDate?: string;
   toDate?: string;
   isIndoor?: boolean;
+  maxAge?: number;
   limit?: number;
   offset?: number;
 };
@@ -103,6 +104,7 @@ type FetchIdeasParams = {
   category?: EventCategory;
   isIndoor?: boolean;
   district?: string;
+  maxAge?: number;
   limit?: number;
   offset?: number;
 };
@@ -273,6 +275,7 @@ export const fetchEvents = async (params: FetchEventsParams = {}): Promise<Event
     from_date: params.fromDate,
     to_date: params.toDate,
     is_indoor: params.isIndoor,
+    max_age: params.maxAge,
     limit: params.limit,
     offset: params.offset,
   });
@@ -287,6 +290,7 @@ export const fetchIdeas = async (params: FetchIdeasParams = {}): Promise<Idea[]>
     category: params.category,
     is_indoor: params.isIndoor,
     district: params.district,
+    max_age: params.maxAge,
     limit: params.limit,
     offset: params.offset,
   });

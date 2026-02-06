@@ -45,9 +45,10 @@ const CategoryLabel: Record<EventCategory, string> = {
 
 interface EventCardProps {
   event: Event;
+  showTypeBadge?: boolean;
 }
 
-export function EventCard({ event }: EventCardProps) {
+export function EventCard({ event, showTypeBadge = true }: EventCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
@@ -95,9 +96,11 @@ export function EventCard({ event }: EventCardProps) {
       onPress={handlePress}
     >
       <View style={styles.badgeRow}>
-        <View style={[styles.categoryBadge, { backgroundColor: '#0087B1' }]}>
-          <Text style={styles.categoryText}>Termin</Text>
-        </View>
+        {showTypeBadge ? (
+          <View style={[styles.categoryBadge, { backgroundColor: '#0087B1' }]}>
+            <Text style={styles.categoryText}>Termin</Text>
+          </View>
+        ) : null}
         <View style={[styles.categoryBadge, { backgroundColor: categoryColor }]}>
           <Icon size={14} color="#FFFFFF" />
           <Text style={styles.categoryText}>{CategoryLabel[event.category]}</Text>

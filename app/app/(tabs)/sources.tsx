@@ -22,7 +22,7 @@ import {
   updateIdea,
   updateSource,
 } from '@/lib/api';
-import { EventCategory, Source, SourceType } from '@/types/event';
+import { EventCategory, ScrapingMode, Source, SourceType } from '@/types/event';
 
 const CATEGORIES: EventCategory[] = [
   'theater',
@@ -54,6 +54,7 @@ export default function SourcesScreen() {
   const [newSourceName, setNewSourceName] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newHints, setNewHints] = useState('');
+  const [newEventScrapingMode, setNewEventScrapingMode] = useState<ScrapingMode>('html');
 
   const [ideaTitle, setIdeaTitle] = useState('');
   const [ideaDescription, setIdeaDescription] = useState('');
@@ -111,6 +112,7 @@ export default function SourcesScreen() {
     setNewSourceName('');
     setNewUrl('');
     setNewHints('');
+    setNewEventScrapingMode('html');
     setIdeaTitle('');
     setIdeaDescription('');
     setIdeaLocationName('');
@@ -138,6 +140,7 @@ export default function SourcesScreen() {
           name: newSourceName.trim() || 'Neue Terminquelle',
           inputUrl: normalizedUrl,
           sourceType: 'event',
+          scrapingMode: newEventScrapingMode,
           scrapingHints: newHints.trim() || undefined,
         });
       } else {
@@ -259,6 +262,17 @@ export default function SourcesScreen() {
     }
   };
 
+  const handleSetScrapingMode = async (source: Source, mode: ScrapingMode) => {
+    if (source.sourceType !== 'event' || source.scrapingMode === mode) return;
+    try {
+      await updateSource(source.id, { scrapingMode: mode });
+      await loadSources(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Scraping-Modus konnte nicht gespeichert werden.';
+      Alert.alert('Fehler', message);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.form, { borderBottomColor: colors.border }]}>
@@ -287,7 +301,33 @@ export default function SourcesScreen() {
         <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={sourceType === 'event' ? 'URL (Pflicht)' : 'URL (optional)'} placeholderTextColor={colors.textSecondary} value={newUrl} onChangeText={setNewUrl} autoCapitalize="none" />
 
         {sourceType === 'event' ? (
-          <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Scraping-Hinweise (optional)" placeholderTextColor={colors.textSecondary} value={newHints} onChangeText={setNewHints} />
+          <>
+            <View style={styles.toggleRow}>
+              <Pressable
+                style={[
+                  styles.toggleButton,
+                  newEventScrapingMode === 'html'
+                    ? { backgroundColor: colors.tint }
+                    : { backgroundColor: colors.backgroundSecondary },
+                ]}
+                onPress={() => setNewEventScrapingMode('html')}
+              >
+                <Text style={styles.toggleText}>Standard (HTML)</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.toggleButton,
+                  newEventScrapingMode === 'vision'
+                    ? { backgroundColor: colors.tint }
+                    : { backgroundColor: colors.backgroundSecondary },
+                ]}
+                onPress={() => setNewEventScrapingMode('vision')}
+              >
+                <Text style={styles.toggleText}>Erweitert (Vision)</Text>
+              </Pressable>
+            </View>
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Scraping-Hinweise (optional)" placeholderTextColor={colors.textSecondary} value={newHints} onChangeText={setNewHints} />
+          </>
         ) : (
           <>
             <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Ideen-Titel" placeholderTextColor={colors.textSecondary} value={ideaTitle} onChangeText={setIdeaTitle} />
@@ -375,6 +415,37 @@ export default function SourcesScreen() {
             <Text style={[styles.rowUrl, { color: colors.textSecondary }]} numberOfLines={1}>
               {item.inputUrl}
             </Text>
+            {item.sourceType === 'event' && (
+              <View style={styles.modeRow}>
+                <Text style={[styles.modeText, { color: colors.textSecondary }]}>
+                  Modus: {item.scrapingMode === 'vision' ? 'Erweitert (Vision)' : 'Standard (HTML)'}
+                </Text>
+                <View style={styles.modeToggleCompact}>
+                  <Pressable
+                    style={[
+                      styles.modeCompactButton,
+                      item.scrapingMode === 'html'
+                        ? { backgroundColor: colors.tint }
+                        : { backgroundColor: colors.backgroundSecondary },
+                    ]}
+                    onPress={() => void handleSetScrapingMode(item, 'html')}
+                  >
+                    <Text style={styles.modeCompactText}>HTML</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.modeCompactButton,
+                      item.scrapingMode === 'vision'
+                        ? { backgroundColor: colors.tint }
+                        : { backgroundColor: colors.backgroundSecondary },
+                    ]}
+                    onPress={() => void handleSetScrapingMode(item, 'vision')}
+                  >
+                    <Text style={styles.modeCompactText}>Vision</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
             <View style={styles.rowActions}>
               {item.sourceType === 'event' && (
                 <Pressable
@@ -444,6 +515,31 @@ const styles = StyleSheet.create({
   badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 11, fontWeight: '700' },
   rowUrl: { marginTop: 6, fontSize: 12 },
+  modeRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  modeText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  modeToggleCompact: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  modeCompactButton: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  modeCompactText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   rowActions: { marginTop: 8, flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
   actionButton: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 70 },

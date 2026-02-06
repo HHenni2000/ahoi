@@ -1,30 +1,48 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import { EventCard } from '@/components/EventCard';
-import { IdeaCard } from '@/components/IdeaCard';
-import Colors from '@/constants/Colors';
+import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { Event, Idea, NearbyReference } from '@/types/event';
-import { fetchEvents, fetchIdeas, fetchNearbyReference } from '@/lib/api';
+import { fetchEvents } from '@/lib/api';
+import { Event, EventCategory } from '@/types/event';
 
-const HAMBURG_FALLBACK_REFERENCE: NearbyReference = {
-  label: 'Hamburg (Fallback)',
-  postalCode: '20095',
-  lat: 53.5511,
-  lng: 9.9937,
-};
+type DateFilter = 'all' | 'today' | 'tomorrow' | 'weekend' | 'week';
+type PlaceFilter = 'all' | 'indoor' | 'outdoor';
 
-type NearbyMode = 'events' | 'ideas';
+const DATE_FILTERS: { key: DateFilter; label: string }[] = [
+  { key: 'all', label: 'Alle' },
+  { key: 'today', label: 'Heute' },
+  { key: 'tomorrow', label: 'Morgen' },
+  { key: 'weekend', label: 'Wochenende' },
+  { key: 'week', label: '7 Tage' },
+];
+
+const CATEGORY_FILTERS: { key: EventCategory | 'all'; label: string }[] = [
+  { key: 'all', label: 'Alle' },
+  { key: 'theater', label: 'Theater' },
+  { key: 'outdoor', label: 'Outdoor' },
+  { key: 'museum', label: 'Museum' },
+  { key: 'music', label: 'Musik' },
+  { key: 'sport', label: 'Sport' },
+  { key: 'market', label: 'Markt' },
+  { key: 'kreativ', label: 'Kreativ' },
+  { key: 'lesen', label: 'Lesen' },
+];
+
+const PLACE_FILTERS: { key: PlaceFilter; label: string }[] = [
+  { key: 'all', label: 'Indoor + Outdoor' },
+  { key: 'indoor', label: 'Nur Indoor' },
+  { key: 'outdoor', label: 'Nur Outdoor' },
+];
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const endOfDay = (date: Date) =>
@@ -32,54 +50,57 @@ const endOfDay = (date: Date) =>
 const addDays = (date: Date, amount: number) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
 
-const getWeekendRange = () => {
+const getDateRange = (filter: DateFilter) => {
   const now = new Date();
-  const day = now.getDay();
-  if (day === 0) {
-    return { fromDate: startOfDay(addDays(now, -1)), toDate: endOfDay(now) };
-  }
-  if (day === 6) {
-    return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, 1)) };
-  }
-  const daysUntilSaturday = (6 - day + 7) % 7;
-  const saturday = addDays(now, daysUntilSaturday);
-  return { fromDate: startOfDay(saturday), toDate: endOfDay(addDays(saturday, 1)) };
-};
 
-const toRad = (value: number) => (value * Math.PI) / 180;
+  if (filter === 'today') {
+    return { fromDate: startOfDay(now), toDate: endOfDay(now) };
+  }
 
-const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const earthRadiusKm = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
+  if (filter === 'tomorrow') {
+    const tomorrow = addDays(now, 1);
+    return { fromDate: startOfDay(tomorrow), toDate: endOfDay(tomorrow) };
+  }
+
+  if (filter === 'week') {
+    return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, 6)) };
+  }
+
+  if (filter === 'weekend') {
+    const day = now.getDay();
+    if (day === 0) {
+      return { fromDate: startOfDay(addDays(now, -1)), toDate: endOfDay(now) };
+    }
+    if (day === 6) {
+      return { fromDate: startOfDay(now), toDate: endOfDay(addDays(now, 1)) };
+    }
+    const daysUntilSaturday = (6 - day + 7) % 7;
+    const saturday = addDays(now, daysUntilSaturday);
+    return { fromDate: startOfDay(saturday), toDate: endOfDay(addDays(saturday, 1)) };
+  }
+
+  return { fromDate: undefined, toDate: undefined };
 };
 
 export default function DiscoverScreen() {
-  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<Event[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [nearbyMode, setNearbyMode] = useState<NearbyMode>('events');
 
-  const [todayEvents, setTodayEvents] = useState<Event[]>([]);
-  const [weekendEvents, setWeekendEvents] = useState<Event[]>([]);
-  const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [nearbyReference, setNearbyReference] = useState<NearbyReference>(
-    HAMBURG_FALLBACK_REFERENCE
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<EventCategory | 'all'>('all');
+  const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('all');
+
+  const hasCustomFilters = useMemo(
+    () => dateFilter !== 'all' || categoryFilter !== 'all' || placeFilter !== 'all',
+    [categoryFilter, dateFilter, placeFilter]
   );
 
-  const loadData = useCallback(
+  const loadEvents = useCallback(
     async (showSpinner = false) => {
       if (showSpinner) {
         setLoading(true);
@@ -87,38 +108,18 @@ export default function DiscoverScreen() {
       setErrorMessage(null);
 
       try {
-        const now = new Date();
-        const { fromDate: weekendFrom, toDate: weekendTo } = getWeekendRange();
-        const in48Hours = addDays(now, 2);
-
-        const [todayData, weekendData, ideasData] = await Promise.all([
-          fetchEvents({
-            fromDate: startOfDay(now).toISOString(),
-            toDate: endOfDay(in48Hours).toISOString(),
-            limit: 50,
-          }),
-          fetchEvents({
-            fromDate: weekendFrom.toISOString(),
-            toDate: weekendTo.toISOString(),
-            limit: 50,
-          }),
-          fetchIdeas({ limit: 50 }),
-        ]);
-
-        setTodayEvents(todayData);
-        setWeekendEvents(weekendData);
-        setIdeas(ideasData);
-
-        try {
-          const reference = await fetchNearbyReference();
-          setNearbyReference(reference);
-        } catch (nearbyError) {
-          console.warn('[Discover] Failed to load nearby reference, using fallback.', nearbyError);
-          setNearbyReference(HAMBURG_FALLBACK_REFERENCE);
-        }
+        const { fromDate, toDate } = getDateRange(dateFilter);
+        const data = await fetchEvents({
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+          fromDate: fromDate ? fromDate.toISOString() : undefined,
+          toDate: toDate ? toDate.toISOString() : undefined,
+          isIndoor:
+            placeFilter === 'all' ? undefined : placeFilter === 'indoor',
+        });
+        setEvents(data);
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Entdecken-Daten konnten nicht geladen werden.';
+          error instanceof Error ? error.message : 'Termine konnten nicht geladen werden.';
         setErrorMessage(message);
       } finally {
         setRefreshing(false);
@@ -127,195 +128,148 @@ export default function DiscoverScreen() {
         }
       }
     },
-    []
+    [categoryFilter, dateFilter, placeFilter]
   );
 
   useEffect(() => {
-    loadData(true);
-  }, [loadData]);
+    loadEvents(true);
+  }, [loadEvents]);
 
-  const nearbyEvents = useMemo(() => {
-    return todayEvents
-      .filter(
-        (event) =>
-          typeof event.location.lat === 'number' && typeof event.location.lng === 'number'
-      )
-      .map((event) => ({
-        item: event,
-        distanceKm: haversineKm(
-          nearbyReference.lat,
-          nearbyReference.lng,
-          event.location.lat as number,
-          event.location.lng as number
-        ),
-      }))
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .slice(0, 8)
-      .map((entry) => entry.item);
-  }, [todayEvents, nearbyReference]);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadEvents();
+  };
 
-  const nearbyIdeas = useMemo(() => {
-    return ideas
-      .filter(
-        (idea) => typeof idea.location.lat === 'number' && typeof idea.location.lng === 'number'
-      )
-      .map((idea) => ({
-        item: idea,
-        distanceKm: haversineKm(
-          nearbyReference.lat,
-          nearbyReference.lng,
-          idea.location.lat as number,
-          idea.location.lng as number
-        ),
-      }))
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .slice(0, 8)
-      .map((entry) => entry.item);
-  }, [ideas, nearbyReference]);
-
-  const renderSectionHeader = (
-    title: string,
-    actionLabel: string | null,
-    onPressAction?: () => void
+  const renderPill = (
+    key: string,
+    label: string,
+    isSelected: boolean,
+    onPress: () => void,
+    selectedColor?: string
   ) => (
-    <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-      {actionLabel && onPressAction ? (
-        <Pressable onPress={onPressAction}>
-          <Text style={[styles.actionText, { color: colors.tint }]}>{actionLabel}</Text>
-        </Pressable>
-      ) : null}
+    <Pressable
+      key={key}
+      style={[
+        styles.pill,
+        {
+          borderColor: isSelected ? selectedColor || colors.tint : colors.border,
+          backgroundColor: isSelected ? selectedColor || colors.tint : colors.background,
+        },
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.pillText,
+          { color: isSelected ? '#FFFFFF' : colors.textSecondary },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  const header = (
+    <View style={styles.headerWrap}>
+      <View style={[styles.hero, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+        <Text style={[styles.heroTitle, { color: colors.text }]}>Entdecken</Text>
+        <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
+          Alle Termine mit schnellen Filtern in einer Liste.
+        </Text>
+      </View>
+
+      <View style={[styles.filterCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.filterBlock}>
+          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Wann</Text>
+          <View style={styles.pillsWrap}>
+            {DATE_FILTERS.map((filter) =>
+              renderPill(
+                filter.key,
+                filter.label,
+                dateFilter === filter.key,
+                () => setDateFilter(filter.key)
+              )
+            )}
+          </View>
+        </View>
+
+        <View style={styles.filterBlock}>
+          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Kategorie</Text>
+          <View style={styles.pillsWrap}>
+            {CATEGORY_FILTERS.map((filter) =>
+              renderPill(
+                filter.key,
+                filter.label,
+                categoryFilter === filter.key,
+                () => setCategoryFilter(filter.key),
+                filter.key !== 'all' ? CategoryColors[filter.key as EventCategory] : undefined
+              )
+            )}
+          </View>
+        </View>
+
+        <View style={styles.filterBlock}>
+          <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Ortstyp</Text>
+          <View style={styles.pillsWrap}>
+            {PLACE_FILTERS.map((filter) =>
+              renderPill(
+                filter.key,
+                filter.label,
+                placeFilter === filter.key,
+                () => setPlaceFilter(filter.key)
+              )
+            )}
+          </View>
+        </View>
+
+        <View style={[styles.resultRow, { borderTopColor: colors.border }]}>
+          <Text style={[styles.resultText, { color: colors.textSecondary }]}>
+            {events.length} Treffer
+          </Text>
+          {hasCustomFilters && (
+            <Pressable
+              onPress={() => {
+                setDateFilter('all');
+                setCategoryFilter('all');
+                setPlaceFilter('all');
+              }}
+              style={[styles.resetButton, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Filter zuruecksetzen</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
     </View>
   );
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            void loadData();
-          }}
-          tintColor={colors.tint}
-        />
-      }
-    >
-      <View style={styles.hero}>
-        <Text style={[styles.heroTitle, { color: colors.text }]}>Was moechtest du entdecken?</Text>
-        <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-          Termine und Ideen sind getrennt, damit nichts untergeht.
-        </Text>
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.tint} />
-        </View>
-      ) : (
-        <>
-          {renderSectionHeader('Heute fuer euch', 'Alle Termine', () => router.push('/(tabs)/termine'))}
-          {todayEvents.slice(0, 4).map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-          {!todayEvents.length && (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Keine kurzfristigen Termine gefunden.
-            </Text>
-          )}
-
-          {renderSectionHeader('Ideen ohne Datum', 'Alle Ideen', () => router.push('/ideas'))}
-          {ideas.slice(0, 4).map((idea) => (
-            <IdeaCard key={idea.id} idea={idea} />
-          ))}
-          {!ideas.length && (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Keine Ideen gefunden.
-            </Text>
-          )}
-
-          {renderSectionHeader(
-            'Dieses Wochenende',
-            'Zur Terminliste',
-            () => router.push('/(tabs)/termine')
-          )}
-          {weekendEvents.slice(0, 4).map((event) => (
-            <EventCard key={`weekend-${event.id}`} event={event} />
-          ))}
-          {!weekendEvents.length && (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Keine Wochenendtermine gefunden.
-            </Text>
-          )}
-
-          {renderSectionHeader('In eurer Naehe', null)}
-          <Text style={[styles.referenceText, { color: colors.textSecondary }]}>
-            Referenz: {nearbyReference.label}
-          </Text>
-          <View style={styles.nearbyToggleRow}>
-            <Pressable
-              style={[
-                styles.toggleButton,
-                {
-                  backgroundColor:
-                    nearbyMode === 'events' ? colors.tint : colors.backgroundSecondary,
-                  borderColor: nearbyMode === 'events' ? colors.tint : colors.border,
-                },
-              ]}
-              onPress={() => setNearbyMode('events')}
-            >
-              <Text
-                style={[
-                  styles.toggleButtonText,
-                  { color: nearbyMode === 'events' ? '#FFFFFF' : colors.textSecondary },
-                ]}
-              >
-                Termine
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.toggleButton,
-                {
-                  backgroundColor:
-                    nearbyMode === 'ideas' ? colors.tint : colors.backgroundSecondary,
-                  borderColor: nearbyMode === 'ideas' ? colors.tint : colors.border,
-                },
-              ]}
-              onPress={() => setNearbyMode('ideas')}
-            >
-              <Text
-                style={[
-                  styles.toggleButtonText,
-                  { color: nearbyMode === 'ideas' ? '#FFFFFF' : colors.textSecondary },
-                ]}
-              >
-                Ideen
-              </Text>
-            </Pressable>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={events}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <EventCard event={item} showTypeBadge={false} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
+        }
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            {loading ? (
+              <ActivityIndicator size="large" color={colors.tint} />
+            ) : (
+              <>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Keine Termine gefunden</Text>
+                {errorMessage && (
+                  <Text style={[styles.errorText, { color: colors.error }]}>{errorMessage}</Text>
+                )}
+              </>
+            )}
           </View>
-
-          {nearbyMode === 'events'
-            ? nearbyEvents.map((event) => <EventCard key={`near-${event.id}`} event={event} />)
-            : nearbyIdeas.map((idea) => <IdeaCard key={`near-idea-${idea.id}`} idea={idea} />)}
-
-          {nearbyMode === 'events' && !nearbyEvents.length && (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Keine Termine mit Koordinaten in der Naehe gefunden.
-            </Text>
-          )}
-          {nearbyMode === 'ideas' && !nearbyIdeas.length && (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Keine Ideen mit Koordinaten in der Naehe gefunden.
-            </Text>
-          )}
-        </>
-      )}
-
-      {errorMessage && <Text style={[styles.errorText, { color: colors.error }]}>{errorMessage}</Text>}
-    </ScrollView>
+        }
+        contentContainerStyle={styles.listContent}
+      />
+    </View>
   );
 }
 
@@ -323,72 +277,95 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  contentContainer: {
-    paddingBottom: 24,
+  listContent: {
+    paddingBottom: 20,
+  },
+  headerWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 12,
+    marginBottom: 8,
   },
   hero: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   heroSubtitle: {
     fontSize: 14,
+    lineHeight: 20,
   },
-  loadingWrap: {
-    paddingTop: 80,
-    alignItems: 'center',
+  filterCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 12,
   },
-  sectionHeader: {
-    marginTop: 16,
-    marginBottom: 4,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  filterBlock: {
+    gap: 8,
   },
-  sectionTitle: {
-    fontSize: 18,
+  filterLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     fontWeight: '700',
   },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  nearbyToggleRow: {
+  pillsWrap: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 8,
   },
-  toggleButton: {
+  pill: {
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  toggleButtonText: {
+  pillText: {
     fontSize: 13,
     fontWeight: '600',
   },
-  referenceText: {
+  resultRow: {
+    borderTopWidth: 1,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  resultText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  resetButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  resetButtonText: {
     fontSize: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    fontWeight: '600',
+  },
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 80,
+    paddingHorizontal: 24,
   },
   emptyText: {
-    fontSize: 13,
-    paddingHorizontal: 16,
-    marginTop: 4,
+    fontSize: 16,
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 12,
-    paddingHorizontal: 16,
-    marginTop: 12,
+    marginTop: 8,
     textAlign: 'center',
   },
 });

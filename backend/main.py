@@ -6,6 +6,7 @@ FastAPI application for the ahoi event and idea aggregator.
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -47,6 +48,20 @@ NEARBY_REFERENCE = {
     "lat": 53.5511,
     "lng": 9.9937,
 }
+
+
+def _read_non_negative_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        print(f"[API] Invalid {name}='{raw}', using default {default}")
+        return default
+
+
+DEFAULT_MAX_ALLOWED_AGE = _read_non_negative_int_env("EVENT_MAX_ALLOWED_AGE", 8)
 
 
 # ============ Pydantic Models for API ============
@@ -183,6 +198,58 @@ def _normalize_source_type(value: Optional[str]) -> str:
     return source_type
 
 
+def _parse_min_age(age_suitability: Optional[str]) -> Optional[int]:
+    """Extract minimum recommended age from free-text age labels."""
+    if not age_suitability:
+        return None
+
+    value = age_suitability.strip().lower()
+    if not value:
+        return None
+
+    if any(token in value for token in ("alle", "all ages", "familie", "ohne alters")):
+        return 0
+
+    range_match = re.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})", value)
+    if range_match:
+        try:
+            return int(range_match.group(1))
+        except ValueError:
+            return None
+
+    ab_match = re.search(r"(?:ab|mindestens|min\.?)\s*(\d{1,2})", value)
+    if ab_match:
+        try:
+            return int(ab_match.group(1))
+        except ValueError:
+            return None
+
+    plus_match = re.search(r"(\d{1,2})\s*\+", value)
+    if plus_match:
+        try:
+            return int(plus_match.group(1))
+        except ValueError:
+            return None
+
+    fallback_number = re.search(r"(\d{1,2})", value)
+    if fallback_number:
+        try:
+            return int(fallback_number.group(1))
+        except ValueError:
+            return None
+
+    return None
+
+
+def _is_age_allowed(age_suitability: Optional[str], max_allowed_age: Optional[int]) -> bool:
+    if max_allowed_age is None:
+        return True
+    min_age = _parse_min_age(age_suitability)
+    if min_age is None:
+        return True
+    return min_age <= max_allowed_age
+
+
 def _resolve_nearby_reference() -> dict:
     postal_code = os.getenv("NEARBY_REF_POSTAL", "22609").strip() or "22609"
     label = os.getenv("NEARBY_REF_LABEL", f"{postal_code} Hamburg").strip() or f"{postal_code} Hamburg"
@@ -295,19 +362,41 @@ async def get_events(
     from_date: Optional[str] = Query(default=None, description="ISO date string"),
     to_date: Optional[str] = Query(default=None, description="ISO date string"),
     is_indoor: Optional[bool] = Query(default=None),
+    max_age: Optional[int] = Query(default=None, ge=0, le=21),
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
 ):
     """Get events with optional filters."""
-    events = db.get_events(
-        region=region,
-        category=category,
-        from_date=from_date,
-        to_date=to_date,
-        is_indoor=is_indoor,
-        limit=limit,
-        offset=offset,
-    )
+    effective_max_age = DEFAULT_MAX_ALLOWED_AGE if max_age is None else max_age
+
+    if effective_max_age is None:
+        events = db.get_events(
+            region=region,
+            category=category,
+            from_date=from_date,
+            to_date=to_date,
+            is_indoor=is_indoor,
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        # Age filter is text-based, so we filter in Python after fetching a larger window.
+        scan_limit = min(5000, max(500, (offset + limit) * 4))
+        raw_events = db.get_events(
+            region=region,
+            category=category,
+            from_date=from_date,
+            to_date=to_date,
+            is_indoor=is_indoor,
+            limit=scan_limit,
+            offset=0,
+        )
+        filtered_events = [
+            event
+            for event in raw_events
+            if _is_age_allowed(event.get("age_suitability"), effective_max_age)
+        ]
+        events = filtered_events[offset : offset + limit]
 
     return [{**event, "is_indoor": bool(event.get("is_indoor"))} for event in events]
 
@@ -330,18 +419,39 @@ async def get_ideas(
     category: Optional[str] = Query(default=None),
     is_indoor: Optional[bool] = Query(default=None),
     district: Optional[str] = Query(default=None),
+    max_age: Optional[int] = Query(default=None, ge=0, le=21),
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
 ):
     """Get ideas with optional filters."""
-    ideas = db.get_ideas(
-        region=region,
-        category=category,
-        is_indoor=is_indoor,
-        district=district,
-        limit=limit,
-        offset=offset,
-    )
+    effective_max_age = DEFAULT_MAX_ALLOWED_AGE if max_age is None else max_age
+
+    if effective_max_age is None:
+        ideas = db.get_ideas(
+            region=region,
+            category=category,
+            is_indoor=is_indoor,
+            district=district,
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        scan_limit = min(5000, max(500, (offset + limit) * 4))
+        raw_ideas = db.get_ideas(
+            region=region,
+            category=category,
+            is_indoor=is_indoor,
+            district=district,
+            limit=scan_limit,
+            offset=0,
+        )
+        filtered_ideas = [
+            idea
+            for idea in raw_ideas
+            if _is_age_allowed(idea.get("age_suitability"), effective_max_age)
+        ]
+        ideas = filtered_ideas[offset : offset + limit]
+
     return [_to_idea_response_row(idea) for idea in ideas]
 
 
