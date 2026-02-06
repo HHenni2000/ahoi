@@ -117,14 +117,47 @@ export type GeminiDiscoveryPayload = {
   model?: string;
 };
 
+export type GeminiDiscoveryStages = {
+  search: {
+    eventsFoundRaw: number;
+    groundingUrlCount: number;
+    model: string;
+    timeoutSeconds?: number;
+    retryCount?: number;
+  };
+  normalization: {
+    eventsNormalized: number;
+    eventsDroppedValidation: number;
+    issuesCount: number;
+  };
+  persistence: {
+    eventsSaved: number;
+    eventsNew: number;
+    eventsExisting: number;
+    eventsDroppedPersistence: number;
+    persistenceErrors?: number;
+  };
+  geocoding: {
+    eventsGeocoded: number;
+  };
+};
+
 export type GeminiDiscoveryResult = {
   success: boolean;
   eventsFound: number;
+  eventsNormalized: number;
   eventsNew: number;
+  eventsExisting: number;
   eventsSaved: number;
   eventsDropped: number;
+  eventsDroppedValidation: number;
+  eventsDroppedPersistence: number;
   errorMessage?: string | null;
   model: string;
+  issues: string[];
+  issueSummary: Record<string, number>;
+  groundingUrls: string[];
+  stages: GeminiDiscoveryStages;
   events: Event[];
 };
 
@@ -470,11 +503,42 @@ export const discoverEventsWithGemini = async (
   const data = await request<{
     success: boolean;
     events_found: number;
+    events_normalized: number;
     events_new: number;
+    events_existing: number;
     events_saved: number;
     events_dropped: number;
+    events_dropped_validation: number;
+    events_dropped_persistence: number;
     error_message?: string | null;
     model: string;
+    issues?: string[] | null;
+    issue_summary?: Record<string, number> | null;
+    grounding_urls?: string[] | null;
+    stages?: {
+      search?: {
+        events_found_raw?: number;
+        grounding_url_count?: number;
+        model?: string;
+        timeout_seconds?: number;
+        retry_count?: number;
+      };
+      normalization?: {
+        events_normalized?: number;
+        events_dropped_validation?: number;
+        issues_count?: number;
+      };
+      persistence?: {
+        events_saved?: number;
+        events_new?: number;
+        events_existing?: number;
+        events_dropped_persistence?: number;
+        persistence_errors?: number;
+      };
+      geocoding?: {
+        events_geocoded?: number;
+      };
+    } | null;
     events: ApiEvent[];
   }>('/api/discovery/gemini', {
     method: 'POST',
@@ -490,11 +554,44 @@ export const discoverEventsWithGemini = async (
   return {
     success: data.success,
     eventsFound: data.events_found,
+    eventsNormalized: data.events_normalized,
     eventsNew: data.events_new,
+    eventsExisting: data.events_existing,
     eventsSaved: data.events_saved,
     eventsDropped: data.events_dropped,
+    eventsDroppedValidation: data.events_dropped_validation,
+    eventsDroppedPersistence: data.events_dropped_persistence,
     errorMessage: data.error_message ?? null,
     model: data.model,
+    issues: data.issues ?? [],
+    issueSummary: data.issue_summary ?? {},
+    groundingUrls: data.grounding_urls ?? [],
+    stages: {
+      search: {
+        eventsFoundRaw: data.stages?.search?.events_found_raw ?? data.events_found,
+        groundingUrlCount: data.stages?.search?.grounding_url_count ?? (data.grounding_urls?.length ?? 0),
+        model: data.stages?.search?.model ?? data.model,
+        timeoutSeconds: data.stages?.search?.timeout_seconds,
+        retryCount: data.stages?.search?.retry_count,
+      },
+      normalization: {
+        eventsNormalized: data.stages?.normalization?.events_normalized ?? data.events_normalized,
+        eventsDroppedValidation:
+          data.stages?.normalization?.events_dropped_validation ?? data.events_dropped_validation,
+        issuesCount: data.stages?.normalization?.issues_count ?? (data.issues?.length ?? 0),
+      },
+      persistence: {
+        eventsSaved: data.stages?.persistence?.events_saved ?? data.events_saved,
+        eventsNew: data.stages?.persistence?.events_new ?? data.events_new,
+        eventsExisting: data.stages?.persistence?.events_existing ?? data.events_existing,
+        eventsDroppedPersistence:
+          data.stages?.persistence?.events_dropped_persistence ?? data.events_dropped_persistence,
+        persistenceErrors: data.stages?.persistence?.persistence_errors,
+      },
+      geocoding: {
+        eventsGeocoded: data.stages?.geocoding?.events_geocoded ?? 0,
+      },
+    },
     events: (data.events ?? []).map(toEvent),
   };
 };

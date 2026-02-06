@@ -22,6 +22,7 @@ import {
   scrapeSource,
   updateIdea,
   updateSource,
+  type GeminiDiscoveryResult,
 } from '@/lib/api';
 import { EventCategory, ScrapingMode, Source, SourceType } from '@/types/event';
 
@@ -78,6 +79,7 @@ export default function SourcesScreen() {
   const [saving, setSaving] = useState(false);
   const [scrapingSourceId, setScrapingSourceId] = useState<string | null>(null);
   const [geminiLoading, setGeminiLoading] = useState(false);
+  const [lastGeminiRun, setLastGeminiRun] = useState<GeminiDiscoveryResult | null>(null);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
 
@@ -229,6 +231,7 @@ export default function SourcesScreen() {
         daysAhead: 14,
         limit: 30,
       });
+      setLastGeminiRun(result);
       await loadSources(true);
 
       if (!result.success) {
@@ -238,7 +241,7 @@ export default function SourcesScreen() {
 
       Alert.alert(
         'Gemini Discovery abgeschlossen',
-        `Gefunden: ${result.eventsFound}\nNeu: ${result.eventsNew}\nGespeichert: ${result.eventsSaved}\nVerworfen: ${result.eventsDropped}`
+        `Gefunden (Search): ${result.eventsFound}\nNormalisiert: ${result.eventsNormalized}\nNeu: ${result.eventsNew}\nGespeichert: ${result.eventsSaved}\nVerworfen gesamt: ${result.eventsDropped}`
       );
     } catch (error) {
       const message =
@@ -247,6 +250,45 @@ export default function SourcesScreen() {
     } finally {
       setGeminiLoading(false);
     }
+  };
+
+  const handleShowGeminiTracking = () => {
+    if (!lastGeminiRun) {
+      Alert.alert('Gemini Tracking', 'Noch kein Discovery-Lauf vorhanden.');
+      return;
+    }
+
+    const topIssues = Object.entries(lastGeminiRun.issueSummary)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([reason, count]) => `- ${reason}: ${count}`)
+      .join('\n');
+
+    const topUrls = lastGeminiRun.groundingUrls
+      .slice(0, 5)
+      .map((url) => `- ${url}`)
+      .join('\n');
+
+    const message =
+      `Stage 1 - Search\n` +
+      `Raw Events: ${lastGeminiRun.stages.search.eventsFoundRaw}\n` +
+      `Grounding URLs: ${lastGeminiRun.stages.search.groundingUrlCount}\n` +
+      `Model: ${lastGeminiRun.stages.search.model}\n` +
+      `Timeout/Retry: ${lastGeminiRun.stages.search.timeoutSeconds ?? '-'}s / ${lastGeminiRun.stages.search.retryCount ?? '-'}\n\n` +
+      `Stage 2 - Normalisierung\n` +
+      `Normalisiert: ${lastGeminiRun.stages.normalization.eventsNormalized}\n` +
+      `Validation Drops: ${lastGeminiRun.stages.normalization.eventsDroppedValidation}\n` +
+      `Issues: ${lastGeminiRun.stages.normalization.issuesCount}\n\n` +
+      `Stage 3 - Persistenz\n` +
+      `Gespeichert: ${lastGeminiRun.stages.persistence.eventsSaved}\n` +
+      `Neu: ${lastGeminiRun.stages.persistence.eventsNew}\n` +
+      `Bestehend: ${lastGeminiRun.stages.persistence.eventsExisting}\n` +
+      `Persistenz Drops: ${lastGeminiRun.stages.persistence.eventsDroppedPersistence}\n` +
+      `Geocoded: ${lastGeminiRun.stages.geocoding.eventsGeocoded}\n\n` +
+      `${topIssues ? `Top Issues:\n${topIssues}\n\n` : ''}` +
+      `${topUrls ? `Top Grounding URLs:\n${topUrls}` : ''}`;
+
+    Alert.alert('Gemini Tracking (letzter Lauf)', message);
   };
 
   const handleDelete = (source: Source) => {
@@ -331,6 +373,30 @@ export default function SourcesScreen() {
               <Text style={styles.discoveryButtonText}>Gemini Discovery starten</Text>
             )}
           </Pressable>
+          {lastGeminiRun && (
+            <View style={[styles.trackingCard, { borderColor: colors.border }]}>
+              <Text style={[styles.trackingTitle, { color: colors.text }]}>Letzter Tracking-Lauf</Text>
+              <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
+                Stage 1 Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw,{' '}
+                {lastGeminiRun.stages.search.groundingUrlCount} Quellen
+              </Text>
+              <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
+                Stage 2 Normalisierung: {lastGeminiRun.stages.normalization.eventsNormalized} normalisiert,{' '}
+                {lastGeminiRun.stages.normalization.eventsDroppedValidation} verworfen
+              </Text>
+              <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
+                Stage 3 Persistenz: {lastGeminiRun.stages.persistence.eventsSaved} gespeichert,{' '}
+                {lastGeminiRun.stages.persistence.eventsNew} neu,{' '}
+                {lastGeminiRun.stages.persistence.eventsExisting} bereits vorhanden
+              </Text>
+              <Pressable
+                style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={handleShowGeminiTracking}
+              >
+                <Text style={[styles.trackingButtonText, { color: colors.text }]}>Tracking Details anzeigen</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         <View style={styles.toggleRow}>
@@ -561,6 +627,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#2F6BFF',
   },
   discoveryButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  trackingCard: { borderWidth: 1, borderRadius: 8, padding: 8, gap: 4 },
+  trackingTitle: { fontSize: 12, fontWeight: '700' },
+  trackingLine: { fontSize: 11, lineHeight: 15 },
+  trackingButton: {
+    marginTop: 4,
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackingButtonText: { fontSize: 12, fontWeight: '700' },
   toggleRow: { flexDirection: 'row', gap: 8 },
   toggleButton: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
   toggleText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },

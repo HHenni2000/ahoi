@@ -8,8 +8,9 @@ import json
 import os
 import re
 import uuid
+from collections import Counter
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -197,11 +198,19 @@ class GeminiDiscoveryRequest(BaseModel):
 class GeminiDiscoveryResponse(BaseModel):
     success: bool
     events_found: int
+    events_normalized: int
     events_new: int
+    events_existing: int
     events_saved: int
     events_dropped: int
+    events_dropped_validation: int
+    events_dropped_persistence: int
     error_message: Optional[str] = None
     model: str
+    issues: list[str] = Field(default_factory=list)
+    issue_summary: dict[str, int] = Field(default_factory=dict)
+    grounding_urls: list[str] = Field(default_factory=list)
+    stages: dict[str, Any] = Field(default_factory=dict)
     events: list[EventResponse] = Field(default_factory=list)
 
 
@@ -259,6 +268,15 @@ def _parse_min_age(age_suitability: Optional[str]) -> Optional[int]:
             return None
 
     return None
+
+
+def _build_issue_summary(issues: list[str]) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for issue in issues:
+        normalized = re.sub(r"^event\[\d+\]\s*", "", issue.strip().lower())
+        normalized = normalized or "unknown"
+        counter[normalized] += 1
+    return dict(counter)
 
 
 def _is_age_allowed(age_suitability: Optional[str], max_allowed_age: Optional[int]) -> bool:
@@ -653,45 +671,141 @@ async def gemini_discovery(payload: GeminiDiscoveryRequest):
     )
 
     if not discovery.get("success"):
+        issues = [str(item) for item in discovery.get("issues", [])]
+        issue_summary = {
+            str(k): int(v)
+            for k, v in (discovery.get("issue_summary", {}) or {}).items()
+            if isinstance(v, int)
+        }
+        if not issue_summary and issues:
+            issue_summary = _build_issue_summary(issues)
+        search_debug = discovery.get("search_debug", {}) if isinstance(discovery.get("search_debug"), dict) else {}
+
         return {
             "success": False,
             "events_found": int(discovery.get("events_found", 0)),
+            "events_normalized": 0,
             "events_new": 0,
+            "events_existing": 0,
             "events_saved": 0,
             "events_dropped": 0,
+            "events_dropped_validation": 0,
+            "events_dropped_persistence": 0,
             "error_message": discovery.get("error_message"),
             "model": str(
                 discovery.get("model")
                 or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview")
             ),
+            "issues": issues,
+            "issue_summary": issue_summary,
+            "grounding_urls": [str(url) for url in discovery.get("grounding_urls", []) if isinstance(url, str)],
+            "stages": {
+                "search": {
+                    "events_found_raw": int(discovery.get("events_found", 0)),
+                    "grounding_url_count": len(discovery.get("grounding_urls", []) or []),
+                    "model": str(
+                        discovery.get("model")
+                        or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview")
+                    ),
+                    "timeout_seconds": search_debug.get("timeout_seconds"),
+                    "retry_count": search_debug.get("retry_count"),
+                },
+                "normalization": {
+                    "events_normalized": 0,
+                    "events_dropped_validation": 0,
+                    "issues_count": len(issues),
+                },
+                "persistence": {
+                    "events_saved": 0,
+                    "events_new": 0,
+                    "events_existing": 0,
+                    "events_dropped_persistence": 0,
+                },
+                "geocoding": {
+                    "events_geocoded": int(discovery.get("geocoded_events", 0)),
+                },
+            },
             "events": [],
         }
 
     events = discovery.get("events", [])
     raw_found = int(discovery.get("events_found", len(events)))
+    normalized_count = int(discovery.get("events_normalized", len(events)))
+    dropped_validation = int(
+        discovery.get("events_dropped_validation", max(raw_found - normalized_count, 0))
+    )
+    geocoded_events = int(discovery.get("geocoded_events", 0))
+    issues = [str(item) for item in discovery.get("issues", [])]
+    grounding_urls = [str(url) for url in discovery.get("grounding_urls", []) if isinstance(url, str)]
+    search_debug = discovery.get("search_debug", {}) if isinstance(discovery.get("search_debug"), dict) else {}
     existing_hashes = set(db.get_event_hashes())
 
     saved_events: list[dict] = []
     events_new = 0
+    persistence_errors = 0
     for event in events:
-        event_dict = to_upsert_event_dict(event, source_id=source["id"])
-        if event_dict["id"] not in existing_hashes:
-            events_new += 1
-        db.upsert_event(event_dict)
-        existing_hashes.add(event_dict["id"])
-        saved_events.append({**event_dict, "is_indoor": bool(event_dict.get("is_indoor"))})
+        try:
+            event_dict = to_upsert_event_dict(event, source_id=source["id"])
+            if event_dict["id"] not in existing_hashes:
+                events_new += 1
+            db.upsert_event(event_dict)
+            existing_hashes.add(event_dict["id"])
+            saved_events.append({**event_dict, "is_indoor": bool(event_dict.get("is_indoor"))})
+        except Exception as exc:
+            persistence_errors += 1
+            issues.append(f"persistence error: {exc}")
+
+    issue_summary = _build_issue_summary(issues)
+
+    events_saved = len(saved_events)
+    events_existing = max(events_saved - events_new, 0)
+    dropped_persistence = max(normalized_count - events_saved, 0)
 
     return {
         "success": True,
         "events_found": raw_found,
+        "events_normalized": normalized_count,
         "events_new": events_new,
-        "events_saved": len(saved_events),
-        "events_dropped": max(raw_found - len(saved_events), 0),
+        "events_existing": events_existing,
+        "events_saved": events_saved,
+        "events_dropped": max(raw_found - events_saved, 0),
+        "events_dropped_validation": dropped_validation,
+        "events_dropped_persistence": dropped_persistence,
         "error_message": None,
         "model": str(
             discovery.get("model")
             or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview")
         ),
+        "issues": issues,
+        "issue_summary": issue_summary,
+        "grounding_urls": grounding_urls,
+        "stages": {
+            "search": {
+                "events_found_raw": raw_found,
+                "grounding_url_count": len(grounding_urls),
+                "model": str(
+                    discovery.get("model")
+                    or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview")
+                ),
+                "timeout_seconds": search_debug.get("timeout_seconds"),
+                "retry_count": search_debug.get("retry_count"),
+            },
+            "normalization": {
+                "events_normalized": normalized_count,
+                "events_dropped_validation": dropped_validation,
+                "issues_count": len(issues),
+            },
+            "persistence": {
+                "events_saved": events_saved,
+                "events_new": events_new,
+                "events_existing": events_existing,
+                "events_dropped_persistence": dropped_persistence,
+                "persistence_errors": persistence_errors,
+            },
+            "geocoding": {
+                "events_geocoded": geocoded_events,
+            },
+        },
         "events": saved_events,
     }
 

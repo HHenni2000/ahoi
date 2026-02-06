@@ -12,6 +12,7 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
+from collections import Counter
 from typing import Any, Optional
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -31,6 +32,7 @@ GEMINI_DISCOVERY_SOURCE_NAME = "Gemini Discovery"
 GEMINI_DISCOVERY_INPUT_URL = "manual://gemini-discovery"
 DEFAULT_GEMINI_TIMEOUT_SECONDS = 90.0
 DEFAULT_GEMINI_RETRY_COUNT = 1
+DEFAULT_GEMINI_DEBUG_TEXT_CHARS = 1200
 
 ALLOWED_CATEGORIES = {
     "theater",
@@ -117,6 +119,44 @@ def _read_non_negative_int_env(name: str, default: int) -> int:
         return value if value >= 0 else default
     except ValueError:
         return default
+
+
+def _extract_grounding_urls(payload: dict[str, Any]) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list):
+        return []
+
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        metadata = candidate.get("groundingMetadata")
+        if not isinstance(metadata, dict):
+            continue
+        chunks = metadata.get("groundingChunks")
+        if not isinstance(chunks, list):
+            continue
+        for chunk in chunks:
+            if not isinstance(chunk, dict):
+                continue
+            web = chunk.get("web")
+            if not isinstance(web, dict):
+                continue
+            uri = web.get("uri")
+            if isinstance(uri, str) and uri and uri not in seen:
+                seen.add(uri)
+                urls.append(uri)
+    return urls
+
+
+def _build_issue_summary(issues: list[str]) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for issue in issues:
+        normalized = re.sub(r"^event\[\d+\]\s*", "", issue.strip().lower())
+        normalized = normalized or "unknown"
+        counter[normalized] += 1
+    return dict(counter)
 
 
 def _extract_events_list(data: Any) -> list[dict[str, Any]]:
@@ -422,6 +462,9 @@ def discover_events(
         "GEMINI_TIMEOUT_SECONDS", DEFAULT_GEMINI_TIMEOUT_SECONDS
     )
     retry_count = _read_non_negative_int_env("GEMINI_RETRY_COUNT", DEFAULT_GEMINI_RETRY_COUNT)
+    debug_text_chars = _read_non_negative_int_env(
+        "GEMINI_DEBUG_TEXT_CHARS", DEFAULT_GEMINI_DEBUG_TEXT_CHARS
+    )
 
     if not api_key:
         return {
@@ -461,6 +504,9 @@ def discover_events(
 
     try:
         parsed: dict[str, Any] | None = None
+        raw_text_excerpt = ""
+        candidate_count = 0
+        grounding_urls: list[str] = []
         for attempt in range(retry_count + 1):
             try:
                 response = httpx.post(
@@ -471,7 +517,12 @@ def discover_events(
                 )
                 response.raise_for_status()
                 payload = response.json()
+                candidates = payload.get("candidates")
+                candidate_count = len(candidates) if isinstance(candidates, list) else 0
+                grounding_urls = _extract_grounding_urls(payload)
                 text = _extract_text_from_payload(payload)
+                if debug_text_chars > 0:
+                    raw_text_excerpt = text[:debug_text_chars]
                 parsed = _parse_json_text(text)
                 break
             except httpx.TimeoutException as exc:
@@ -496,8 +547,23 @@ def discover_events(
             "success": False,
             "model": model_name,
             "events_found": 0,
+            "events_normalized": 0,
+            "events_dropped_validation": 0,
             "events": [],
             "issues": [],
+            "issue_summary": {},
+            "grounding_urls": [],
+            "geocoded_events": 0,
+            "search_debug": {
+                "query": query.strip(),
+                "region": region,
+                "days_ahead": max(1, days_ahead),
+                "limit": max(1, limit),
+                "timeout_seconds": timeout_seconds,
+                "retry_count": retry_count,
+                "raw_text_excerpt": "",
+                "candidate_count": 0,
+            },
             "error_message": error_message,
         }
     except Exception as exc:
@@ -505,8 +571,23 @@ def discover_events(
             "success": False,
             "model": model_name,
             "events_found": 0,
+            "events_normalized": 0,
+            "events_dropped_validation": 0,
             "events": [],
             "issues": [],
+            "issue_summary": {},
+            "grounding_urls": [],
+            "geocoded_events": 0,
+            "search_debug": {
+                "query": query.strip(),
+                "region": region,
+                "days_ahead": max(1, days_ahead),
+                "limit": max(1, limit),
+                "timeout_seconds": timeout_seconds,
+                "retry_count": retry_count,
+                "raw_text_excerpt": "",
+                "candidate_count": 0,
+            },
             "error_message": f"Gemini discovery failed: {exc}",
         }
 
@@ -517,17 +598,37 @@ def discover_events(
         limit=max(1, limit),
     )
 
+    geocoded_events = 0
     try:
-        _enrich_missing_coordinates(normalized)
+        geocoded_events = _enrich_missing_coordinates(normalized)
     except Exception:
         # Geocoding is best-effort and should never fail the discovery flow.
         pass
 
+    events_found = len(raw_events)
+    events_normalized = len(normalized)
+    events_dropped_validation = max(events_found - events_normalized, 0)
+
     return {
         "success": True,
         "model": model_name,
-        "events_found": len(raw_events),
+        "events_found": events_found,
+        "events_normalized": events_normalized,
+        "events_dropped_validation": events_dropped_validation,
         "events": normalized,
         "issues": issues,
+        "issue_summary": _build_issue_summary(issues),
+        "grounding_urls": grounding_urls,
+        "geocoded_events": geocoded_events,
+        "search_debug": {
+            "query": query.strip(),
+            "region": region,
+            "days_ahead": max(1, days_ahead),
+            "limit": max(1, limit),
+            "timeout_seconds": timeout_seconds,
+            "retry_count": retry_count,
+            "raw_text_excerpt": raw_text_excerpt,
+            "candidate_count": candidate_count,
+        },
         "error_message": None,
     }
