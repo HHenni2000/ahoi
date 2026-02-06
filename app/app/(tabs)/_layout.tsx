@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Calendar, Map, Settings } from 'lucide-react-native';
+import { Compass, Calendar, Map, Settings } from 'lucide-react-native';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -27,8 +27,17 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Events',
+          title: 'Entdecken',
           headerTitle: 'ahoi Hamburg',
+          tabBarIcon: ({ color, size }) => (
+            <Compass size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="termine"
+        options={{
+          title: 'Termine',
           tabBarIcon: ({ color, size }) => (
             <Calendar size={size} color={color} />
           ),

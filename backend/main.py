@@ -1,13 +1,16 @@
 """
 ahoi Backend API
 
-FastAPI application for the ahoi event aggregator.
+FastAPI application for the ahoi event and idea aggregator.
 """
 
+import json
 import os
+import uuid
 from datetime import datetime
 from typing import Optional
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +18,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 import database as db
-from scraper.models import Source, SourceStatus, ScrapingMode
+from scraper.models import ScrapingMode, Source, SourceStatus, SourceType
 from scraper.pipeline import ScrapingPipeline
 
 # Load environment variables
@@ -24,8 +27,8 @@ load_dotenv()
 # Initialize FastAPI
 app = FastAPI(
     title="ahoi API",
-    description="Family-friendly event aggregator for Hamburg",
-    version="1.0.0",
+    description="Family-friendly event and idea aggregator for Hamburg",
+    version="1.1.0",
 )
 
 # CORS middleware (allow Expo app to connect)
@@ -38,16 +41,64 @@ app.add_middleware(
 )
 
 
+NEARBY_REFERENCE = {
+    "label": "22609 Hamburg",
+    "postal_code": "22609",
+    "lat": 53.5511,
+    "lng": 9.9937,
+}
+
+
 # ============ Pydantic Models for API ============
+
+
+class IdeaCreate(BaseModel):
+    title: str
+    description: str
+    location_name: str
+    location_address: str
+    category: str
+    is_indoor: bool
+    age_suitability: str
+    price_info: str
+    location_district: Optional[str] = None
+    location_lat: Optional[float] = None
+    location_lng: Optional[float] = None
+    duration_minutes: Optional[int] = None
+    weather_tags: Optional[list[str]] = None
+    original_link: Optional[str] = None
+    region: str = "hamburg"
+
+
+class IdeaUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    location_name: Optional[str] = None
+    location_address: Optional[str] = None
+    location_district: Optional[str] = None
+    location_lat: Optional[float] = None
+    location_lng: Optional[float] = None
+    category: Optional[str] = None
+    is_indoor: Optional[bool] = None
+    age_suitability: Optional[str] = None
+    price_info: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    weather_tags: Optional[list[str]] = None
+    original_link: Optional[str] = None
+    region: Optional[str] = None
+    is_active: Optional[bool] = None
+
 
 class SourceCreate(BaseModel):
     name: str
-    input_url: str
+    input_url: str = ""
     region: str = "hamburg"
     strategy: str = "weekly"
+    source_type: str = "event"
     scraping_mode: str = "html"
     scraping_hints: Optional[str] = None
     custom_selectors: Optional[str] = None
+    idea: Optional[IdeaCreate] = None
 
 
 class SourceUpdate(BaseModel):
@@ -56,6 +107,8 @@ class SourceUpdate(BaseModel):
     target_url: Optional[str] = None
     is_active: Optional[bool] = None
     strategy: Optional[str] = None
+    region: Optional[str] = None
+    source_type: Optional[str] = None
     scraping_mode: Optional[str] = None
     scraping_hints: Optional[str] = None
     custom_selectors: Optional[str] = None
@@ -81,6 +134,34 @@ class EventResponse(BaseModel):
     region: str
 
 
+class IdeaResponse(BaseModel):
+    id: str
+    source_id: Optional[str]
+    title: str
+    description: Optional[str]
+    location_name: Optional[str]
+    location_address: Optional[str]
+    location_district: Optional[str]
+    location_lat: Optional[float]
+    location_lng: Optional[float]
+    category: Optional[str]
+    is_indoor: bool
+    age_suitability: Optional[str]
+    price_info: Optional[str]
+    duration_minutes: Optional[int]
+    weather_tags: Optional[list[str]]
+    original_link: Optional[str]
+    region: str
+    is_active: bool
+
+
+class NearbyReferenceResponse(BaseModel):
+    label: str
+    postal_code: str
+    lat: float
+    lng: float
+
+
 class ScrapeResponse(BaseModel):
     success: bool
     events_found: int
@@ -95,16 +176,93 @@ class HealthResponse(BaseModel):
     sources_count: int
 
 
+def _normalize_source_type(value: Optional[str]) -> str:
+    source_type = (value or "event").lower().strip()
+    if source_type not in {"event", "idea"}:
+        raise HTTPException(status_code=400, detail="source_type must be 'event' or 'idea'")
+    return source_type
+
+
+def _resolve_nearby_reference() -> dict:
+    postal_code = os.getenv("NEARBY_REF_POSTAL", "22609").strip() or "22609"
+    label = os.getenv("NEARBY_REF_LABEL", f"{postal_code} Hamburg").strip() or f"{postal_code} Hamburg"
+
+    lat_env = os.getenv("NEARBY_REF_LAT")
+    lng_env = os.getenv("NEARBY_REF_LNG")
+
+    if lat_env and lng_env:
+        try:
+            return {
+                "label": label,
+                "postal_code": postal_code,
+                "lat": float(lat_env),
+                "lng": float(lng_env),
+            }
+        except ValueError:
+            print("[API] Invalid NEARBY_REF_LAT/LNG env values, falling back to geocoding")
+
+    try:
+        response = httpx.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": label, "format": "json", "limit": 1},
+            headers={"User-Agent": "ahoi-backend/1.0"},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload:
+            return {
+                "label": label,
+                "postal_code": postal_code,
+                "lat": float(payload[0]["lat"]),
+                "lng": float(payload[0]["lon"]),
+            }
+    except Exception as exc:
+        print(f"[API] Failed to geocode nearby reference '{label}': {exc}")
+
+    # Last resort fallback (Hamburg center)
+    return {
+        "label": label,
+        "postal_code": postal_code,
+        "lat": 53.5511,
+        "lng": 9.9937,
+    }
+
+
+def _to_idea_response_row(idea: dict) -> dict:
+    weather_tags_raw = idea.get("weather_tags")
+    weather_tags: Optional[list[str]] = None
+    if weather_tags_raw:
+        try:
+            parsed = json.loads(weather_tags_raw)
+            if isinstance(parsed, list):
+                weather_tags = [str(item) for item in parsed]
+        except Exception:
+            weather_tags = None
+
+    return {
+        **idea,
+        "is_indoor": bool(idea.get("is_indoor")),
+        "is_active": bool(idea.get("is_active")),
+        "weather_tags": weather_tags,
+    }
+
+
 # ============ Startup ============
+
 
 @app.on_event("startup")
 async def startup():
     """Initialize database on startup."""
+    global NEARBY_REFERENCE
     db.init_db()
+    NEARBY_REFERENCE = _resolve_nearby_reference()
     print("[API] Database initialized")
+    print(f"[API] Nearby reference: {NEARBY_REFERENCE}")
 
 
 # ============ Health Check ============
+
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health():
@@ -118,7 +276,17 @@ async def health():
     }
 
 
+# ============ Meta Endpoints ============
+
+
+@app.get("/api/meta/nearby-reference", response_model=NearbyReferenceResponse)
+async def get_nearby_reference():
+    """Get server-side nearby reference point (PLZ 22609 Hamburg by default)."""
+    return NEARBY_REFERENCE
+
+
 # ============ Events Endpoints ============
+
 
 @app.get("/api/events", response_model=list[EventResponse])
 async def get_events(
@@ -141,14 +309,7 @@ async def get_events(
         offset=offset,
     )
 
-    # Convert SQLite rows to response format
-    return [
-        {
-            **event,
-            "is_indoor": bool(event.get("is_indoor")),
-        }
-        for event in events
-    ]
+    return [{**event, "is_indoor": bool(event.get("is_indoor"))} for event in events]
 
 
 @app.get("/api/events/{event_id}", response_model=EventResponse)
@@ -157,42 +318,142 @@ async def get_event(event_id: str):
     event = db.get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return {
-        **event,
-        "is_indoor": bool(event.get("is_indoor")),
-    }
+    return {**event, "is_indoor": bool(event.get("is_indoor"))}
+
+
+# ============ Ideas Endpoints ============
+
+
+@app.get("/api/ideas", response_model=list[IdeaResponse])
+async def get_ideas(
+    region: str = Query(default="hamburg"),
+    category: Optional[str] = Query(default=None),
+    is_indoor: Optional[bool] = Query(default=None),
+    district: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """Get ideas with optional filters."""
+    ideas = db.get_ideas(
+        region=region,
+        category=category,
+        is_indoor=is_indoor,
+        district=district,
+        limit=limit,
+        offset=offset,
+    )
+    return [_to_idea_response_row(idea) for idea in ideas]
+
+
+@app.get("/api/ideas/{idea_id}", response_model=IdeaResponse)
+async def get_idea(idea_id: str):
+    """Get a single idea by ID."""
+    idea = db.get_idea(idea_id)
+    if not idea:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return _to_idea_response_row(idea)
+
+
+@app.patch("/api/ideas/{idea_id}", response_model=IdeaResponse)
+async def update_idea(idea_id: str, update: IdeaUpdate):
+    """Update an existing idea."""
+    existing = db.get_idea(idea_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Idea not found")
+
+    update_data = update.model_dump(exclude_unset=True)
+    if "weather_tags" in update_data and update_data["weather_tags"] is not None:
+        update_data["weather_tags"] = json.dumps(update_data["weather_tags"])
+
+    updated = db.update_idea(idea_id, **update_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    return _to_idea_response_row(updated)
+
+
+@app.delete("/api/ideas/{idea_id}")
+async def delete_idea(idea_id: str):
+    """Delete an idea by ID."""
+    if not db.get_idea(idea_id):
+        raise HTTPException(status_code=404, detail="Idea not found")
+    db.delete_idea(idea_id)
+    return {"deleted": True}
 
 
 # ============ Sources Endpoints ============
 
+
 @app.get("/api/sources")
-async def get_sources(active_only: bool = Query(default=False)):
+async def get_sources(
+    active_only: bool = Query(default=False),
+    source_type: Optional[str] = Query(default=None),
+):
     """Get all sources."""
-    sources = db.get_all_sources(active_only=active_only)
-    return [
-        {
-            **source,
-            "is_active": bool(source.get("is_active")),
-        }
-        for source in sources
-    ]
+    normalized_source_type = _normalize_source_type(source_type) if source_type else None
+    sources = db.get_all_sources(active_only=active_only, source_type=normalized_source_type)
+    return [{**source, "is_active": bool(source.get("is_active"))} for source in sources]
 
 
 @app.post("/api/sources")
 async def create_source(source: SourceCreate):
-    """Create a new source."""
+    """Create a new source (event or idea)."""
+    source_type = _normalize_source_type(source.source_type)
+
+    input_url = (source.input_url or "").strip()
+    if source_type == "event" and not input_url:
+        raise HTTPException(status_code=400, detail="input_url is required for event sources")
+
+    if not input_url:
+        input_url = f"manual://{source.name.lower().replace(' ', '-')[:40]}"
+
     new_source = db.create_source(
         name=source.name,
-        input_url=source.input_url,
+        input_url=input_url,
         region=source.region,
         strategy=source.strategy,
+        source_type=source_type,
         scraping_mode=source.scraping_mode,
         scraping_hints=source.scraping_hints,
         custom_selectors=source.custom_selectors,
     )
+
+    # Idea source requires an initial idea payload
+    idea_response = None
+    if source_type == "idea":
+        if not source.idea:
+            db.delete_source(new_source["id"])
+            raise HTTPException(status_code=400, detail="idea payload is required for idea sources")
+
+        weather_tags_json = json.dumps(source.idea.weather_tags) if source.idea.weather_tags else None
+        idea_id = str(uuid.uuid4())
+        idea_record = db.create_idea(
+            {
+                "id": idea_id,
+                "source_id": new_source["id"],
+                "title": source.idea.title,
+                "description": source.idea.description,
+                "location_name": source.idea.location_name,
+                "location_address": source.idea.location_address,
+                "location_district": source.idea.location_district,
+                "location_lat": source.idea.location_lat,
+                "location_lng": source.idea.location_lng,
+                "category": source.idea.category,
+                "is_indoor": source.idea.is_indoor,
+                "age_suitability": source.idea.age_suitability,
+                "price_info": source.idea.price_info,
+                "duration_minutes": source.idea.duration_minutes,
+                "weather_tags": weather_tags_json,
+                "original_link": source.idea.original_link or (source.input_url or None),
+                "region": source.idea.region or source.region,
+                "is_active": True,
+            }
+        )
+        idea_response = _to_idea_response_row(idea_record)
+
     return {
         **new_source,
         "is_active": bool(new_source.get("is_active")),
+        "idea": idea_response,
     }
 
 
@@ -202,10 +463,12 @@ async def get_source(source_id: str):
     source = db.get_source(source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
-    return {
-        **source,
-        "is_active": bool(source.get("is_active")),
-    }
+
+    response = {**source, "is_active": bool(source.get("is_active"))}
+    if source.get("source_type") == "idea":
+        idea = db.get_idea_by_source_id(source_id)
+        response["idea"] = _to_idea_response_row(idea) if idea else None
+    return response
 
 
 @app.patch("/api/sources/{source_id}")
@@ -216,16 +479,16 @@ async def update_source(source_id: str, update: SourceUpdate):
         raise HTTPException(status_code=404, detail="Source not found")
 
     update_data = update.model_dump(exclude_unset=True)
+    if "source_type" in update_data and update_data["source_type"] is not None:
+        update_data["source_type"] = _normalize_source_type(update_data["source_type"])
+
     updated = db.update_source(source_id, **update_data)
-    return {
-        **updated,
-        "is_active": bool(updated.get("is_active")),
-    }
+    return {**updated, "is_active": bool(updated.get("is_active"))}
 
 
 @app.delete("/api/sources/{source_id}")
 async def delete_source(source_id: str):
-    """Delete a source and its events."""
+    """Delete a source and its linked content."""
     if not db.get_source(source_id):
         raise HTTPException(status_code=404, detail="Source not found")
 
@@ -235,49 +498,49 @@ async def delete_source(source_id: str):
 
 # ============ Scraping Endpoints ============
 
+
 @app.post("/api/sources/{source_id}/scrape", response_model=ScrapeResponse)
 async def scrape_source(source_id: str):
-    """Manually trigger scraping for a source."""
+    """Manually trigger scraping for an event source."""
     source_data = db.get_source(source_id)
     if not source_data:
         raise HTTPException(status_code=404, detail="Source not found")
 
-    # Check for OpenAI API key
+    source_type = _normalize_source_type(source_data.get("source_type") or "event")
+    if source_type != "event":
+        raise HTTPException(status_code=400, detail="Scraping is only available for source_type='event'")
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
 
-    # Convert to Source model
-    scraping_mode_str = source_data.get('scraping_mode', 'html')
+    scraping_mode_str = source_data.get("scraping_mode", "html")
     try:
         scraping_mode = ScrapingMode(scraping_mode_str)
     except ValueError:
         scraping_mode = ScrapingMode.HTML
 
     source = Source(
-        id=source_data['id'],
-        name=source_data['name'],
-        input_url=source_data['input_url'],
-        target_url=source_data.get('target_url'),
-        is_active=bool(source_data.get('is_active')),
-        status=SourceStatus(source_data.get('status', 'pending')),
-        strategy=source_data.get('strategy', 'weekly'),
-        region=source_data.get('region', 'hamburg'),
+        id=source_data["id"],
+        name=source_data["name"],
+        input_url=source_data["input_url"],
+        target_url=source_data.get("target_url"),
+        is_active=bool(source_data.get("is_active")),
+        status=SourceStatus(source_data.get("status", "pending")),
+        strategy=source_data.get("strategy", "weekly"),
+        region=source_data.get("region", "hamburg"),
+        source_type=SourceType(source_data.get("source_type") or "event"),
         scraping_mode=scraping_mode,
-        scraping_hints=source_data.get('scraping_hints'),
-        custom_selectors=None,  # TODO: Parse JSON if needed
+        scraping_hints=source_data.get("scraping_hints"),
+        custom_selectors=None,
     )
 
-    # Get existing hashes for deduplication
     existing_hashes = db.get_event_hashes()
 
-    # Run scraping pipeline
     client = OpenAI(api_key=api_key)
-
     with ScrapingPipeline(client, existing_hashes=existing_hashes) as pipeline:
         result, events = pipeline.run(source)
 
-    # Update source
     db.update_source(
         source_id,
         target_url=source.target_url,
@@ -286,26 +549,25 @@ async def scrape_source(source_id: str):
         last_error=result.error_message,
     )
 
-    # Save events to database
     for event in events:
         event_dict = {
-            'id': event.id,
-            'source_id': event.source_id,
-            'title': event.title,
-            'description': event.description,
-            'date_start': event.date_start.isoformat(),
-            'date_end': event.date_end.isoformat() if event.date_end else None,
-            'location_name': event.location.name,
-            'location_address': event.location.address,
-            'location_district': event.location.district,
-            'location_lat': event.location.lat,
-            'location_lng': event.location.lng,
-            'category': event.category.value,
-            'is_indoor': event.is_indoor,
-            'age_suitability': event.age_suitability,
-            'price_info': event.price_info,
-            'original_link': event.original_link,
-            'region': event.region,
+            "id": event.id,
+            "source_id": event.source_id,
+            "title": event.title,
+            "description": event.description,
+            "date_start": event.date_start.isoformat(),
+            "date_end": event.date_end.isoformat() if event.date_end else None,
+            "location_name": event.location.name,
+            "location_address": event.location.address,
+            "location_district": event.location.district,
+            "location_lat": event.location.lat,
+            "location_lng": event.location.lng,
+            "category": event.category.value,
+            "is_indoor": event.is_indoor,
+            "age_suitability": event.age_suitability,
+            "price_info": event.price_info,
+            "original_link": event.original_link,
+            "region": event.region,
         }
         db.upsert_event(event_dict)
 
@@ -320,6 +582,8 @@ async def scrape_source(source_id: str):
 
 # ============ Main Entry Point ============
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

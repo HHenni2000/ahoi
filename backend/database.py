@@ -43,6 +43,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
             last_error TEXT,
             strategy TEXT DEFAULT 'weekly',
             region TEXT DEFAULT 'hamburg',
+            source_type TEXT DEFAULT 'event',
             scraping_mode TEXT DEFAULT 'html',
             scraping_hints TEXT,
             custom_selectors TEXT,
@@ -75,6 +76,38 @@ def init_db(db_path: Optional[Path] = None) -> None:
         )
     """)
 
+    # Ideas table (evergreen activities without fixed schedule)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ideas (
+            id TEXT PRIMARY KEY,
+            source_id TEXT UNIQUE REFERENCES sources(id),
+            title TEXT NOT NULL,
+            description TEXT,
+            location_name TEXT,
+            location_address TEXT,
+            location_district TEXT,
+            location_lat REAL,
+            location_lng REAL,
+            category TEXT,
+            is_indoor INTEGER,
+            age_suitability TEXT,
+            price_info TEXT,
+            duration_minutes INTEGER,
+            weather_tags TEXT,
+            original_link TEXT,
+            region TEXT DEFAULT 'hamburg',
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Backward-compatible column add for existing databases
+    cursor.execute("PRAGMA table_info(sources)")
+    source_columns = {row[1] for row in cursor.fetchall()}
+    if "source_type" not in source_columns:
+        cursor.execute("ALTER TABLE sources ADD COLUMN source_type TEXT DEFAULT 'event'")
+
     # Indexes for fast queries
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_events_region_date
@@ -87,6 +120,18 @@ def init_db(db_path: Optional[Path] = None) -> None:
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_events_source
         ON events(source_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ideas_region_category
+        ON ideas(region, category)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ideas_source
+        ON ideas(source_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ideas_region_district
+        ON ideas(region, location_district)
     """)
 
     conn.commit()
@@ -115,6 +160,7 @@ def create_source(
     input_url: str,
     region: str = "hamburg",
     strategy: str = "weekly",
+    source_type: str = "event",
     scraping_mode: str = "html",
     scraping_hints: Optional[str] = None,
     custom_selectors: Optional[str] = None,
@@ -126,9 +172,19 @@ def create_source(
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO sources (id, name, input_url, region, strategy, scraping_mode, scraping_hints, custom_selectors)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (source_id, name, input_url, region, strategy, scraping_mode, scraping_hints, custom_selectors))
+            INSERT INTO sources (id, name, input_url, region, strategy, source_type, scraping_mode, scraping_hints, custom_selectors)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            source_id,
+            name,
+            input_url,
+            region,
+            strategy,
+            source_type,
+            scraping_mode,
+            scraping_hints,
+            custom_selectors,
+        ))
         conn.commit()
 
     return get_source(source_id)
@@ -143,14 +199,22 @@ def get_source(source_id: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def get_all_sources(active_only: bool = False) -> list[dict]:
+def get_all_sources(active_only: bool = False, source_type: Optional[str] = None) -> list[dict]:
     """Get all sources."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        query = "SELECT * FROM sources"
+        conditions: list[str] = []
+        params: list = []
         if active_only:
-            cursor.execute("SELECT * FROM sources WHERE is_active = 1 ORDER BY name")
-        else:
-            cursor.execute("SELECT * FROM sources ORDER BY name")
+            conditions.append("is_active = 1")
+        if source_type:
+            conditions.append("source_type = ?")
+            params.append(source_type)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY name"
+        cursor.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -158,7 +222,7 @@ def update_source(source_id: str, **kwargs) -> Optional[dict]:
     """Update source fields."""
     allowed_fields = {
         'name', 'input_url', 'target_url', 'is_active', 'status',
-        'last_scraped', 'last_error', 'strategy', 'region',
+        'last_scraped', 'last_error', 'strategy', 'region', 'source_type',
         'scraping_mode', 'scraping_hints', 'custom_selectors'
     }
 
@@ -181,6 +245,7 @@ def delete_source(source_id: str) -> bool:
     """Delete a source and its events."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        cursor.execute("DELETE FROM ideas WHERE source_id = ?", (source_id,))
         cursor.execute("DELETE FROM events WHERE source_id = ?", (source_id,))
         cursor.execute("DELETE FROM sources WHERE id = ?", (source_id,))
         conn.commit()
@@ -342,6 +407,129 @@ def get_events_count(region: str = "hamburg") -> int:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) as count FROM events WHERE region = ?", (region,))
         return cursor.fetchone()['count']
+
+
+# ============ Idea Operations ============
+
+def create_idea(idea: dict) -> dict:
+    """Create an idea entry."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO ideas (
+                id, source_id, title, description,
+                location_name, location_address, location_district,
+                location_lat, location_lng,
+                category, is_indoor, age_suitability,
+                price_info, duration_minutes, weather_tags,
+                original_link, region, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            idea['id'],
+            idea.get('source_id'),
+            idea['title'],
+            idea.get('description'),
+            idea.get('location_name'),
+            idea.get('location_address'),
+            idea.get('location_district'),
+            idea.get('location_lat'),
+            idea.get('location_lng'),
+            idea.get('category'),
+            1 if idea.get('is_indoor') else 0,
+            idea.get('age_suitability'),
+            idea.get('price_info'),
+            idea.get('duration_minutes'),
+            idea.get('weather_tags'),
+            idea.get('original_link'),
+            idea.get('region', 'hamburg'),
+            1 if idea.get('is_active', True) else 0,
+        ))
+        conn.commit()
+    return get_idea(idea['id'])
+
+
+def get_idea(idea_id: str) -> Optional[dict]:
+    """Get idea by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ideas WHERE id = ?", (idea_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_idea_by_source_id(source_id: str) -> Optional[dict]:
+    """Get idea by source ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ideas WHERE source_id = ?", (source_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_ideas(
+    region: str = "hamburg",
+    category: Optional[str] = None,
+    is_indoor: Optional[bool] = None,
+    district: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict]:
+    """Get ideas with optional filters."""
+    query = "SELECT * FROM ideas WHERE region = ? AND is_active = 1"
+    params = [region]
+
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+
+    if is_indoor is not None:
+        query += " AND is_indoor = ?"
+        params.append(1 if is_indoor else 0)
+
+    if district:
+        query += " AND location_district = ?"
+        params.append(district)
+
+    query += " ORDER BY updated_at DESC, created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def update_idea(idea_id: str, **kwargs) -> Optional[dict]:
+    """Update idea fields."""
+    allowed_fields = {
+        'title', 'description', 'location_name', 'location_address', 'location_district',
+        'location_lat', 'location_lng', 'category', 'is_indoor', 'age_suitability',
+        'price_info', 'duration_minutes', 'weather_tags', 'original_link', 'region', 'is_active',
+    }
+    updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
+    if not updates:
+        return get_idea(idea_id)
+
+    # Ensure updated_at changes on each write
+    updates['updated_at'] = datetime.utcnow().isoformat()
+    set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
+    values = list(updates.values()) + [idea_id]
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"UPDATE ideas SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+
+    return get_idea(idea_id)
+
+
+def delete_idea(idea_id: str) -> bool:
+    """Delete idea by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 # Initialize on import (creates tables if needed)

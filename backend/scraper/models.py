@@ -41,6 +41,12 @@ class ScrapingMode(str, Enum):
     VISION = "vision"
 
 
+class SourceType(str, Enum):
+    """Type of source content."""
+    EVENT = "event"
+    IDEA = "idea"
+
+
 class Location(BaseModel):
     """Location information for an event."""
     name: str = Field(..., description="Name of the venue")
@@ -84,6 +90,7 @@ class Source(BaseModel):
     last_error: Optional[str] = Field(None)
     strategy: ScrapingStrategy = Field(default=ScrapingStrategy.WEEKLY)
     region: str = Field(default="hamburg")
+    source_type: SourceType = Field(default=SourceType.EVENT, description="Source content type: event or idea")
     scraping_mode: ScrapingMode = Field(default=ScrapingMode.HTML, description="Scraping method: html or vision")
     scraping_hints: Optional[str] = Field(None, description="Source-specific hints for improved extraction")
     custom_selectors: Optional[Dict[str, str]] = Field(None, description="Custom CSS selectors for code-based scraping")

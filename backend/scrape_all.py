@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 import database as db
-from scraper.models import Source, SourceStatus
+from scraper.models import Source, SourceStatus, SourceType, ScrapingMode
 from scraper.pipeline import ScrapingPipeline
 
 # Load environment variables
@@ -41,7 +41,7 @@ def scrape_all_sources():
         sys.exit(1)
 
     # Get all active sources
-    sources = db.get_all_sources(active_only=True)
+    sources = db.get_all_sources(active_only=True, source_type="event")
     print(f"[scrape_all] Found {len(sources)} active sources\n")
 
     if not sources:
@@ -76,6 +76,9 @@ def scrape_all_sources():
             status=SourceStatus(source_data.get('status', 'pending')),
             strategy=source_data.get('strategy', 'weekly'),
             region=source_data.get('region', 'hamburg'),
+            source_type=SourceType(source_data.get('source_type') or 'event'),
+            scraping_mode=ScrapingMode(source_data.get('scraping_mode', 'html')),
+            scraping_hints=source_data.get('scraping_hints'),
         )
 
         try:

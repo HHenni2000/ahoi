@@ -5,8 +5,8 @@ import type { Region } from 'react-native-maps';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { fetchEvents } from '@/lib/api';
-import { Event } from '@/types/event';
+import { fetchEvents, fetchIdeas } from '@/lib/api';
+import { Event, Idea } from '@/types/event';
 
 const HAMBURG_REGION: Region = {
   latitude: 53.5511,
@@ -34,6 +34,7 @@ export default function MapScreen() {
     colorScheme === 'dark' ? 'rgba(18,18,18,0.75)' : 'rgba(255,255,255,0.75)';
 
   const [events, setEvents] = useState<Event[]>([]);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -41,9 +42,10 @@ export default function MapScreen() {
     let isMounted = true;
     const loadEvents = async () => {
       try {
-        const data = await fetchEvents();
+        const [eventData, ideaData] = await Promise.all([fetchEvents(), fetchIdeas()]);
         if (isMounted) {
-          setEvents(data);
+          setEvents(eventData);
+          setIdeas(ideaData);
         }
       } catch (error) {
         if (isMounted) {
@@ -73,13 +75,32 @@ export default function MapScreen() {
     [events]
   );
 
+  const ideasWithCoords = useMemo(
+    () =>
+      ideas.filter(
+        (idea) => typeof idea.location.lat === 'number' && typeof idea.location.lng === 'number'
+      ),
+    [ideas]
+  );
+
   const initialRegion = useMemo<Region>(() => {
-    if (!eventsWithCoords.length) {
+    const allLatLng = [
+      ...eventsWithCoords.map((event) => ({
+        lat: event.location.lat ?? HAMBURG_REGION.latitude,
+        lng: event.location.lng ?? HAMBURG_REGION.longitude,
+      })),
+      ...ideasWithCoords.map((idea) => ({
+        lat: idea.location.lat ?? HAMBURG_REGION.latitude,
+        lng: idea.location.lng ?? HAMBURG_REGION.longitude,
+      })),
+    ];
+
+    if (!allLatLng.length) {
       return HAMBURG_REGION;
     }
 
-    const lats = eventsWithCoords.map((event) => event.location.lat ?? HAMBURG_REGION.latitude);
-    const lngs = eventsWithCoords.map((event) => event.location.lng ?? HAMBURG_REGION.longitude);
+    const lats = allLatLng.map((entry) => entry.lat);
+    const lngs = allLatLng.map((entry) => entry.lng);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
@@ -91,7 +112,7 @@ export default function MapScreen() {
       latitudeDelta: Math.max(0.05, maxLat - minLat + 0.05),
       longitudeDelta: Math.max(0.05, maxLng - minLng + 0.05),
     };
-  }, [eventsWithCoords]);
+  }, [eventsWithCoords, ideasWithCoords]);
 
   if (!MapViewComponent || !MarkerComponent) {
     return (
@@ -124,6 +145,19 @@ export default function MapScreen() {
             }}
             title={event.title}
             description={event.location.name}
+            pinColor="#0087B1"
+          />
+        ))}
+        {ideasWithCoords.map((idea) => (
+          <MarkerComponent
+            key={idea.id}
+            coordinate={{
+              latitude: idea.location.lat as number,
+              longitude: idea.location.lng as number,
+            }}
+            title={`[Idee] ${idea.title}`}
+            description={idea.location.name}
+            pinColor="#2E8B57"
           />
         ))}
       </MapViewComponent>
@@ -137,7 +171,7 @@ export default function MapScreen() {
         </View>
       )}
 
-      {!loading && eventsWithCoords.length === 0 && (
+      {!loading && eventsWithCoords.length === 0 && ideasWithCoords.length === 0 && (
         <View style={[styles.overlay, { backgroundColor: overlayBackground }]}>
           <MapPin size={48} color={colors.textSecondary} />
           <Text style={[styles.title, { color: colors.text }]}>
@@ -149,6 +183,19 @@ export default function MapScreen() {
           {errorMessage && (
             <Text style={[styles.note, { color: colors.error }]}>{errorMessage}</Text>
           )}
+        </View>
+      )}
+
+      {!loading && (eventsWithCoords.length > 0 || ideasWithCoords.length > 0) && (
+        <View style={[styles.legend, { backgroundColor: overlayBackground, borderColor: colors.border }]}>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#0087B1' }]} />
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Termin</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#2E8B57' }]} />
+            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Immer moeglich</Text>
+          </View>
         </View>
       )}
     </View>
@@ -189,5 +236,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+  legend: {
+    position: 'absolute',
+    left: 12,
+    bottom: 24,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

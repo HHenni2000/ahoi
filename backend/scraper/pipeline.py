@@ -17,7 +17,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from .models import Source, Event, ScrapingResult, SourceStatus, ScrapingMode
+from .models import Source, Event, ScrapingResult, SourceStatus, ScrapingMode, SourceType
 from .navigator import Navigator
 from .extractor import Extractor
 from .deduplicator import Deduplicator
@@ -130,6 +130,10 @@ class ScrapingPipeline:
         )
         
         try:
+            source_type = source.source_type if hasattr(source, "source_type") else SourceType.EVENT
+            if source_type == SourceType.IDEA:
+                raise ValueError("ScrapingPipeline can only run for source_type='event'")
+
             # Check scraping mode
             scraping_mode = source.scraping_mode if hasattr(source, 'scraping_mode') else ScrapingMode.HTML
 

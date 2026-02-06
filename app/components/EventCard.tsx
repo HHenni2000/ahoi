@@ -94,10 +94,14 @@ export function EventCard({ event }: EventCardProps) {
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={handlePress}
     >
-      {/* Category Badge */}
-      <View style={[styles.categoryBadge, { backgroundColor: categoryColor }]}>
-        <Icon size={14} color="#FFFFFF" />
-        <Text style={styles.categoryText}>{CategoryLabel[event.category]}</Text>
+      <View style={styles.badgeRow}>
+        <View style={[styles.categoryBadge, { backgroundColor: '#0087B1' }]}>
+          <Text style={styles.categoryText}>Termin</Text>
+        </View>
+        <View style={[styles.categoryBadge, { backgroundColor: categoryColor }]}>
+          <Icon size={14} color="#FFFFFF" />
+          <Text style={styles.categoryText}>{CategoryLabel[event.category]}</Text>
+        </View>
       </View>
 
       {/* Title */}
@@ -174,6 +178,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 8,
   },
   categoryText: {

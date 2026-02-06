@@ -10,6 +10,8 @@ export type EventCategory =
   | 'kreativ'
   | 'lesen';
 
+export type SourceType = 'event' | 'idea';
+
 export interface Location {
   name: string;
   address: string;
@@ -34,6 +36,30 @@ export interface Event {
   region: string;
 }
 
+export interface Idea {
+  id: string;
+  sourceId: string;
+  title: string;
+  description: string;
+  location: Location;
+  category: EventCategory;
+  isIndoor: boolean;
+  ageSuitability: string;
+  priceInfo: string;
+  durationMinutes?: number;
+  weatherTags?: string[];
+  originalLink?: string;
+  region: string;
+  isActive: boolean;
+}
+
+export interface NearbyReference {
+  label: string;
+  postalCode: string;
+  lat: number;
+  lng: number;
+}
+
 export type ScrapingMode = 'html' | 'vision';
 
 export interface Source {
@@ -47,6 +73,7 @@ export interface Source {
   lastError?: string;
   strategy: 'weekly' | 'monthly';
   region: string;
+  sourceType: SourceType;
   scrapingMode: ScrapingMode;
   scrapingHints?: string;
   customSelectors?: string; // JSON string
