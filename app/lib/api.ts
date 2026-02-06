@@ -109,6 +109,25 @@ type FetchIdeasParams = {
   offset?: number;
 };
 
+export type GeminiDiscoveryPayload = {
+  query: string;
+  region?: string;
+  daysAhead?: number;
+  limit?: number;
+  model?: string;
+};
+
+export type GeminiDiscoveryResult = {
+  success: boolean;
+  eventsFound: number;
+  eventsNew: number;
+  eventsSaved: number;
+  eventsDropped: number;
+  errorMessage?: string | null;
+  model: string;
+  events: Event[];
+};
+
 export type IdeaCreatePayload = {
   title: string;
   description: string;
@@ -443,4 +462,39 @@ export const scrapeSource = async (sourceId: string) => {
     error_message?: string | null;
     duration_seconds: number;
   }>(`/api/sources/${sourceId}/scrape`, { method: 'POST' });
+};
+
+export const discoverEventsWithGemini = async (
+  payload: GeminiDiscoveryPayload
+): Promise<GeminiDiscoveryResult> => {
+  const data = await request<{
+    success: boolean;
+    events_found: number;
+    events_new: number;
+    events_saved: number;
+    events_dropped: number;
+    error_message?: string | null;
+    model: string;
+    events: ApiEvent[];
+  }>('/api/discovery/gemini', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: payload.query,
+      region: payload.region ?? 'hamburg',
+      days_ahead: payload.daysAhead ?? 14,
+      limit: payload.limit ?? 30,
+      model: payload.model ?? null,
+    }),
+  });
+
+  return {
+    success: data.success,
+    eventsFound: data.events_found,
+    eventsNew: data.events_new,
+    eventsSaved: data.events_saved,
+    eventsDropped: data.events_dropped,
+    errorMessage: data.error_message ?? null,
+    model: data.model,
+    events: (data.events ?? []).map(toEvent),
+  };
 };

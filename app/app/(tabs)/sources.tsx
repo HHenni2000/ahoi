@@ -15,6 +15,7 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
   createSource,
+  discoverEventsWithGemini,
   deleteSource,
   fetchSourceById,
   fetchSources,
@@ -34,6 +35,9 @@ const CATEGORIES: EventCategory[] = [
   'kreativ',
   'lesen',
 ];
+
+const GEMINI_DISCOVERY_QUERY =
+  'familienfreundliche wanderbuehne zirkus puppentheater mobile theater gastspiel hamburg';
 
 const normalizeUrl = (rawUrl: string) => {
   const trimmed = rawUrl.trim();
@@ -73,6 +77,7 @@ export default function SourcesScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [scrapingSourceId, setScrapingSourceId] = useState<string | null>(null);
+  const [geminiLoading, setGeminiLoading] = useState(false);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
 
@@ -215,6 +220,35 @@ export default function SourcesScreen() {
     }
   };
 
+  const handleGeminiDiscovery = async () => {
+    setGeminiLoading(true);
+    try {
+      const result = await discoverEventsWithGemini({
+        query: GEMINI_DISCOVERY_QUERY,
+        region: 'hamburg',
+        daysAhead: 14,
+        limit: 30,
+      });
+      await loadSources(true);
+
+      if (!result.success) {
+        Alert.alert('Gemini Discovery', result.errorMessage ?? 'Gemini Discovery konnte nicht abgeschlossen werden.');
+        return;
+      }
+
+      Alert.alert(
+        'Gemini Discovery abgeschlossen',
+        `Gefunden: ${result.eventsFound}\nNeu: ${result.eventsNew}\nGespeichert: ${result.eventsSaved}\nVerworfen: ${result.eventsDropped}`
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Gemini Discovery konnte nicht gestartet werden.';
+      Alert.alert('Fehler', message);
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
   const handleDelete = (source: Source) => {
     Alert.alert('Quelle loeschen', `Soll "${source.name}" geloescht werden?`, [
       { text: 'Abbrechen', style: 'cancel' },
@@ -276,6 +310,29 @@ export default function SourcesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.form, { borderBottomColor: colors.border }]}>
+        <View
+          style={[
+            styles.discoveryCard,
+            { borderColor: colors.border, backgroundColor: colors.backgroundSecondary },
+          ]}
+        >
+          <Text style={[styles.discoveryTitle, { color: colors.text }]}>Gemini Discovery (Google Search)</Text>
+          <Text style={[styles.discoveryHint, { color: colors.textSecondary }]}>
+            Fokus: Wanderbuehnen, Zirkus und Puppentheater in Hamburg (naechste 14 Tage).
+          </Text>
+          <Pressable
+            style={[styles.discoveryButton, geminiLoading && { opacity: 0.7 }]}
+            disabled={geminiLoading}
+            onPress={() => void handleGeminiDiscovery()}
+          >
+            {geminiLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.discoveryButtonText}>Gemini Discovery starten</Text>
+            )}
+          </Pressable>
+        </View>
+
         <View style={styles.toggleRow}>
           <Pressable
             style={[
@@ -493,6 +550,17 @@ export default function SourcesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   form: { borderBottomWidth: 1, padding: 12, gap: 8 },
+  discoveryCard: { borderWidth: 1, borderRadius: 10, padding: 10, gap: 8, marginBottom: 4 },
+  discoveryTitle: { fontSize: 13, fontWeight: '700' },
+  discoveryHint: { fontSize: 12, lineHeight: 16 },
+  discoveryButton: {
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2F6BFF',
+  },
+  discoveryButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   toggleRow: { flexDirection: 'row', gap: 8 },
   toggleButton: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
   toggleText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },

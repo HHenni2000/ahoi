@@ -52,7 +52,7 @@ RESPONSE_JSON_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string"},
-                    "description": {"type": "string"},
+                    "description": {"type": ["string", "null"]},
                     "date_start": {"type": "string"},
                     "date_end": {"type": ["string", "null"]},
                     "location_name": {"type": ["string", "null"]},
@@ -442,6 +442,23 @@ def discover_events(
         payload = response.json()
         text = _extract_text_from_payload(payload)
         parsed = _parse_json_text(text)
+    except httpx.HTTPStatusError as exc:
+        detail = ""
+        try:
+            detail = exc.response.text
+        except Exception:
+            detail = ""
+        error_message = f"Gemini discovery failed: {exc}"
+        if detail:
+            error_message = f"{error_message} | response={detail}"
+        return {
+            "success": False,
+            "model": model_name,
+            "events_found": 0,
+            "events": [],
+            "issues": [],
+            "error_message": error_message,
+        }
     except Exception as exc:
         return {
             "success": False,
