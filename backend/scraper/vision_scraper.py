@@ -32,7 +32,7 @@ Deine Aufgabe:
 1. Analysiere den Screenshot und extrahiere Veranstaltungen der NÄCHSTEN 14 TAGE
 2. Filtere NUR familienfreundliche Events, die für Kinder ab 4 Jahren geeignet sind
 3. Kategorisiere jedes Event PRÄZISE nach dem Hauptinhalt
-4. WICHTIG: Extrahiere maximal 30 Events um die Response-Länge zu begrenzen
+4. Extrahiere alle relevanten Events im sichtbaren Material innerhalb des Zeitraums
 
 KATEGORIEN (wähle die am besten passende):
 - theater: Theateraufführungen, Puppentheater, Musicals, Figurentheater, Kinderoper, Schauspiel, szenische Lesungen

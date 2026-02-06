@@ -212,6 +212,13 @@ class Extractor:
         self.max_content_length = max_content_length
         self.force_playwright = use_playwright
         self.max_iframes = int(os.getenv("MAX_IFRAMES", "3"))
+        self.max_pagination_pages = max(1, int(os.getenv("MAX_PAGINATION_PAGES", "25")))
+        self.pagination_stop_after_no_range_pages = max(
+            1, int(os.getenv("PAGINATION_STOP_AFTER_NO_RANGE_PAGES", "2"))
+        )
+        self.structured_enrichment_chunk_size = max(
+            1, int(os.getenv("STRUCTURED_ENRICHMENT_CHUNK_SIZE", "60"))
+        )
         self.logger = get_logger(__name__)
         self.structured_extractor = StructuredExtractor()
         self.http_client = httpx.Client(
@@ -245,14 +252,16 @@ class Extractor:
             List of extracted Event objects.
         """
         try:
+            self._last_tokens_used = 0
             self.logger.info("Extracting events from %s", url)
             if is_debug():
                 self.logger.debug(
-                    "Settings: model=%s playwright=%s max_iframes=%s max_content_length=%s",
+                    "Settings: model=%s playwright=%s max_iframes=%s max_content_length=%s max_pagination_pages=%s",
                     self.model,
                     self.force_playwright,
                     self.max_iframes,
                     self.max_content_length,
+                    self.max_pagination_pages,
                 )
             # Fetch and convert HTML
             html = self._fetch_html(url)
@@ -260,23 +269,21 @@ class Extractor:
                 self.logger.warning("No HTML fetched from %s", url)
                 return []
 
-            expanded_html = self._expand_iframes(html, url)
+            page_urls = self._discover_paginated_urls(html, url)
+            if len(page_urls) > 1:
+                self.logger.info(
+                    "Detected pagination for %s: %s page(s) scheduled (max=%s)",
+                    url,
+                    len(page_urls),
+                    self.max_pagination_pages,
+                )
 
-            # STRATEGY 1: Try structured extraction first
-            raw_events = self.structured_extractor.extract(expanded_html, url)
-            if raw_events:
-                print(f"[Extractor] Structured extraction found {len(raw_events)} events")
-                events = self._enrich_structured_events(raw_events, source_name)
-                if events:
-                    print(f"[Extractor] After filtering: {len(events)} family-friendly events")
-                    self.logger.info("Structured extraction: %s events", len(events))
-                    return events
-
-            # STRATEGY 2: Fallback to full LLM extraction
-            print(f"[Extractor] Using LLM extraction for {url}")
-            markdown_content = self._html_to_markdown(expanded_html)
-            link_list = self._extract_links(expanded_html, url)
-            events = self._extract_via_llm(markdown_content, url, source_name, link_list, hints)
+            events = self._extract_events_from_pages(
+                page_urls=page_urls,
+                first_page_html=html,
+                source_name=source_name,
+                hints=hints,
+            )
 
             # Fallback: try Playwright if no events and not already using it
             if (
@@ -285,20 +292,20 @@ class Extractor:
                 and not _needs_playwright(url)
             ):
                 self.logger.info("Retrying extraction with Playwright for %s", url)
-                html_pw = self._fetch_html_playwright(url)
-                if html_pw:
-                    expanded_html = self._expand_iframes(html_pw, url)
-
-                    # Try structured first, then LLM
-                    raw_events = self.structured_extractor.extract(expanded_html, url)
-                    if raw_events:
-                        events = self._enrich_structured_events(raw_events, source_name)
-                    else:
-                        markdown_content = self._html_to_markdown(expanded_html)
-                        link_list = self._extract_links(expanded_html, url)
-                        events = self._extract_via_llm(
-                            markdown_content, url, source_name, link_list, hints
+                previous_force_playwright = self.force_playwright
+                self.force_playwright = True
+                try:
+                    html_pw = self._fetch_html(url)
+                    if html_pw:
+                        page_urls = self._discover_paginated_urls(html_pw, url)
+                        events = self._extract_events_from_pages(
+                            page_urls=page_urls,
+                            first_page_html=html_pw,
+                            source_name=source_name,
+                            hints=hints,
                         )
+                finally:
+                    self.force_playwright = previous_force_playwright
 
             print(f"[Extractor] Found {len(events)} events from {url}")
             self.logger.info("Found %s events from %s", len(events), url)
@@ -536,6 +543,242 @@ class Extractor:
         if is_debug():
             self.logger.debug("Inlined %s iframe(s)", len(appended))
         return html + "\n" + "\n".join(appended)
+
+    def _extract_events_from_pages(
+        self,
+        page_urls: list[str],
+        first_page_html: str,
+        source_name: str = "",
+        hints: Optional[str] = None,
+    ) -> list[Event]:
+        """
+        Extract events across one or more paginated pages.
+
+        Strategy per page:
+        1. Expand iframes
+        2. Try structured extraction
+        3. Fallback to LLM extraction
+        """
+        all_events: list[Event] = []
+        all_raw_events: list[RawEvent] = []
+        consecutive_no_range_pages = 0
+
+        for index, page_url in enumerate(page_urls, start=1):
+            page_html = first_page_html if index == 1 else self._fetch_html(page_url)
+            if not page_html:
+                self.logger.warning("Skipping page %s (no HTML fetched)", page_url)
+                continue
+
+            expanded_html = self._expand_iframes(page_html, page_url)
+
+            # For paginated sources, stop early once consecutive pages are outside target range.
+            if len(page_urls) > 1 and index > 1:
+                page_text = BeautifulSoup(expanded_html, "lxml").get_text("\n", strip=True)
+                if not self._contains_date_in_range(page_text, days_ahead=14):
+                    consecutive_no_range_pages += 1
+                    self.logger.info(
+                        "Skipping paginated page %s (no dates in next 14 days, streak=%s)",
+                        page_url,
+                        consecutive_no_range_pages,
+                    )
+                    if (
+                        consecutive_no_range_pages
+                        >= self.pagination_stop_after_no_range_pages
+                    ):
+                        self.logger.info(
+                            "Stopping pagination after %s consecutive pages without relevant dates",
+                            consecutive_no_range_pages,
+                        )
+                        break
+                    continue
+                consecutive_no_range_pages = 0
+
+            raw_events = self.structured_extractor.extract(expanded_html, page_url)
+            if raw_events:
+                print(
+                    f"[Extractor] Structured extraction found {len(raw_events)} events on page {index}/{len(page_urls)}"
+                )
+                all_raw_events.extend(raw_events)
+                continue
+
+            print(f"[Extractor] Using LLM extraction for page {index}/{len(page_urls)}: {page_url}")
+            markdown_content = self._html_to_markdown(expanded_html)
+            link_list = self._extract_links(expanded_html, page_url)
+            page_events = self._extract_via_llm(
+                markdown_content,
+                page_url,
+                source_name,
+                link_list,
+                hints,
+            )
+            all_events.extend(page_events)
+
+        if all_raw_events:
+            structured_events = self._enrich_structured_events(all_raw_events, source_name)
+            if structured_events:
+                print(f"[Extractor] Structured enrichment produced {len(structured_events)} events")
+            all_events.extend(structured_events)
+
+        return all_events
+
+    def _discover_paginated_urls(self, html: str, base_url: str) -> list[str]:
+        """Detect pagination links and build a bounded list of page URLs to scrape."""
+        from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
+
+        soup = BeautifulSoup(html, "lxml")
+        base_parsed = urlparse(base_url)
+
+        param_candidates: dict[str, list[tuple[int, str]]] = {}
+        for anchor in soup.find_all("a", href=True):
+            href = (anchor.get("href") or "").strip()
+            if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                continue
+
+            absolute_url = urljoin(base_url, href)
+            parsed = urlparse(absolute_url)
+
+            # Stay on the same host/path to avoid unrelated widgets that use page params.
+            if parsed.netloc != base_parsed.netloc:
+                continue
+            if parsed.path != base_parsed.path:
+                continue
+
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            for key, values in query.items():
+                if not values:
+                    continue
+                value = values[0]
+                if not value.isdigit():
+                    continue
+
+                key_lower = key.lower()
+                if (
+                    "page" in key_lower
+                    or "seite" in key_lower
+                    or key_lower in {"p", "start", "offset"}
+                ):
+                    param_candidates.setdefault(key, []).append((int(value), absolute_url))
+                    break
+
+        if not param_candidates:
+            return [base_url]
+
+        selected_param, selected_values = max(
+            param_candidates.items(),
+            key=lambda item: len(item[1]),
+        )
+
+        max_detected_page = max(number for number, _ in selected_values)
+        page_count_match = re.search(
+            r"\bSeite\s+\d+\s+von\s+(\d+)\b",
+            soup.get_text(" ", strip=True),
+            re.IGNORECASE,
+        )
+        if page_count_match:
+            try:
+                max_detected_page = max(max_detected_page, int(page_count_match.group(1)))
+            except ValueError:
+                pass
+
+        max_pages_to_scrape = min(max_detected_page, self.max_pagination_pages)
+        if max_pages_to_scrape <= 1:
+            return [base_url]
+
+        template_url = selected_values[0][1]
+        template_parsed = urlparse(template_url)
+        template_query = parse_qs(template_parsed.query, keep_blank_values=True)
+        if selected_param not in template_query:
+            return [base_url]
+
+        page_urls = [base_url]
+        seen = {base_url}
+
+        for page_number in range(2, max_pages_to_scrape + 1):
+            query = {k: list(v) for k, v in template_query.items()}
+            query[selected_param] = [str(page_number)]
+            built_url = urlunparse(
+                template_parsed._replace(query=urlencode(query, doseq=True))
+            )
+            if built_url not in seen:
+                seen.add(built_url)
+                page_urls.append(built_url)
+
+        return page_urls
+
+    def _contains_date_in_range(self, text: str, days_ahead: int = 14) -> bool:
+        """Check if text contains at least one date within the upcoming range."""
+        today = datetime.now().date()
+        cutoff_date = today + timedelta(days=days_ahead)
+        for candidate in self._extract_dates_from_text(text):
+            if today <= candidate <= cutoff_date:
+                return True
+        return False
+
+    def _extract_dates_from_text(self, text: str) -> list[datetime.date]:
+        """Extract date candidates from free text using common German patterns."""
+        today = datetime.now().date()
+        month_names_de = {
+            "januar": 1, "jan": 1,
+            "februar": 2, "feb": 2,
+            "märz": 3, "maerz": 3, "mrz": 3,
+            "april": 4, "apr": 4,
+            "mai": 5,
+            "juni": 6, "jun": 6,
+            "juli": 7, "jul": 7,
+            "august": 8, "aug": 8,
+            "september": 9, "sep": 9, "sept": 9,
+            "oktober": 10, "okt": 10,
+            "november": 11, "nov": 11,
+            "dezember": 12, "dez": 12,
+        }
+
+        dates: list[datetime.date] = []
+        seen: set[datetime.date] = set()
+        text_lower = text.lower()
+
+        for match in re.finditer(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", text):
+            try:
+                parsed = datetime(
+                    int(match.group(3)),
+                    int(match.group(2)),
+                    int(match.group(1)),
+                ).date()
+                if parsed not in seen:
+                    seen.add(parsed)
+                    dates.append(parsed)
+            except ValueError:
+                continue
+
+        for match in re.finditer(r"\b(\d{1,2})\.(\d{1,2})\.\b", text):
+            try:
+                day = int(match.group(1))
+                month = int(match.group(2))
+                year = today.year
+                parsed = datetime(year, month, day).date()
+                if (today - parsed).days > 60:
+                    parsed = datetime(year + 1, month, day).date()
+                if parsed not in seen:
+                    seen.add(parsed)
+                    dates.append(parsed)
+            except ValueError:
+                continue
+
+        for month_name, month_num in month_names_de.items():
+            pattern = rf"\b(\d{{1,2}})\.\s*{month_name}\b"
+            for match in re.finditer(pattern, text_lower):
+                try:
+                    day = int(match.group(1))
+                    year = today.year
+                    parsed = datetime(year, month_num, day).date()
+                    if (today - parsed).days > 60:
+                        parsed = datetime(year + 1, month_num, day).date()
+                    if parsed not in seen:
+                        seen.add(parsed)
+                        dates.append(parsed)
+                except ValueError:
+                    continue
+
+        return dates
     
     def _html_to_markdown(self, html: str) -> str:
         """
@@ -754,96 +997,109 @@ class Extractor:
         if not raw_events:
             return []
 
-        # Build compact event list for LLM
-        events_list = []
-        for i, raw in enumerate(raw_events):
-            events_list.append(
-                f"[{i}] {raw.title}\n"
-                f"    Termine: {len(raw.dates)} Aufführungen\n"
-                f"    Beschreibung: {raw.description_hint or 'Keine Beschreibung'}"
+        chunk_size = self.structured_enrichment_chunk_size
+        events: list[Event] = []
+        total_tokens = 0
+        chunks_total = (len(raw_events) + chunk_size - 1) // chunk_size
+
+        for chunk_index, start in enumerate(range(0, len(raw_events), chunk_size), start=1):
+            chunk = raw_events[start:start + chunk_size]
+
+            events_list = []
+            for i, raw in enumerate(chunk):
+                events_list.append(
+                    f"[{i}] {raw.title}\n"
+                    f"    Termine: {len(raw.dates)} Auffuehrungen\n"
+                    f"    Beschreibung: {raw.description_hint or 'Keine Beschreibung'}"
+                )
+
+            events_text = "\n\n".join(events_list)
+            user_prompt = ENRICHMENT_USER_PROMPT.format(
+                source_name=source_name or "Unbekannt",
+                events_list=events_text,
             )
 
-        events_text = "\n\n".join(events_list)
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": ENRICHMENT_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=4000,
+                    temperature=0.1,
+                )
 
-        user_prompt = ENRICHMENT_USER_PROMPT.format(
-            source_name=source_name or "Unbekannt",
-            events_list=events_text,
+                tokens_used = response.usage.total_tokens if response.usage else 0
+                total_tokens += tokens_used
+                if is_debug():
+                    self.logger.debug(
+                        "Enrichment chunk %s/%s tokens: %s",
+                        chunk_index,
+                        chunks_total,
+                        tokens_used,
+                    )
+
+                result = response.choices[0].message.content.strip()
+                enrichments = self._parse_enrichment_response(result)
+
+                for enrichment in enrichments:
+                    idx = enrichment.get("index")
+                    if idx is None or idx >= len(chunk):
+                        continue
+
+                    if not enrichment.get("is_family_friendly", False):
+                        continue
+
+                    raw = chunk[idx]
+
+                    for j, date in enumerate(raw.dates):
+                        link = raw.links[j] if j < len(raw.links) else raw.links[0] if raw.links else ""
+
+                        category_str = enrichment.get("category", "theater").lower()
+                        try:
+                            category = EventCategory(category_str)
+                        except ValueError:
+                            category = EventCategory.THEATER
+
+                        location = Location(
+                            name=raw.location_hint or source_name or "Unbekannt",
+                            address="Unbekannt",
+                        )
+
+                        event = Event(
+                            title=raw.title,
+                            description=enrichment.get("description", raw.description_hint or "")[:500],
+                            date_start=date,
+                            date_end=None,
+                            location=location,
+                            category=category,
+                            is_indoor=True,
+                            age_suitability=enrichment.get("age_suitability", "4+"),
+                            price_info=enrichment.get("price_info", "Unbekannt"),
+                            original_link=link,
+                        )
+                        events.append(event)
+
+            except Exception as e:
+                print(f"[Extractor] Enrichment error (chunk {chunk_index}/{chunks_total}): {e}")
+                self.logger.warning(
+                    "Enrichment error in chunk %s/%s: %s",
+                    chunk_index,
+                    chunks_total,
+                    e,
+                )
+                continue
+
+        self._last_tokens_used += total_tokens
+        self.logger.info(
+            "Enrichment: %s raw events -> %s family-friendly events (chunks=%s, tokens=%s)",
+            len(raw_events),
+            len(events),
+            chunks_total,
+            total_tokens,
         )
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": ENRICHMENT_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=4000,
-                temperature=0.1,
-            )
-
-            self._last_tokens_used = response.usage.total_tokens if response.usage else 0
-            if is_debug():
-                self.logger.debug("Enrichment tokens used: %s", self._last_tokens_used)
-
-            result = response.choices[0].message.content.strip()
-
-            # Parse enrichment response
-            enrichments = self._parse_enrichment_response(result)
-
-            # Build final events
-            events = []
-            for enrichment in enrichments:
-                idx = enrichment.get('index')
-                if idx is None or idx >= len(raw_events):
-                    continue
-
-                if not enrichment.get('is_family_friendly', False):
-                    continue
-
-                raw = raw_events[idx]
-
-                # Create one Event per date
-                for j, date in enumerate(raw.dates):
-                    link = raw.links[j] if j < len(raw.links) else raw.links[0] if raw.links else ""
-
-                    # Parse category
-                    category_str = enrichment.get('category', 'theater').lower()
-                    try:
-                        category = EventCategory(category_str)
-                    except ValueError:
-                        category = EventCategory.THEATER
-
-                    # Build location (we don't have details yet, use source name)
-                    location = Location(
-                        name=raw.location_hint or source_name or "Unbekannt",
-                        address="Unbekannt",
-                    )
-
-                    event = Event(
-                        title=raw.title,
-                        description=enrichment.get('description', raw.description_hint or "")[:500],
-                        date_start=date,
-                        date_end=None,
-                        location=location,
-                        category=category,
-                        is_indoor=True,  # Most theater events are indoor
-                        age_suitability=enrichment.get('age_suitability', '4+'),
-                        price_info=enrichment.get('price_info', 'Unbekannt'),
-                        original_link=link,
-                    )
-                    events.append(event)
-
-            self.logger.info(
-                "Enrichment: %s raw events -> %s family-friendly events",
-                len(raw_events),
-                len(events)
-            )
-            return events
-
-        except Exception as e:
-            print(f"[Extractor] Enrichment error: {e}")
-            self.logger.warning("Enrichment error: %s", e)
-            return []
+        return events
 
     def _parse_enrichment_response(self, json_str: str) -> list[dict]:
         """Parse LLM enrichment response."""
@@ -902,10 +1158,11 @@ class Extractor:
                 temperature=0.1,
             )
             
-            # Track token usage
-            self._last_tokens_used = response.usage.total_tokens if response.usage else 0
+            # Track token usage across multiple pages/chunks
+            tokens_used = response.usage.total_tokens if response.usage else 0
+            self._last_tokens_used += tokens_used
             if is_debug():
-                self.logger.debug("LLM tokens used: %s", self._last_tokens_used)
+                self.logger.debug("LLM tokens used: %s", tokens_used)
             
             result = response.choices[0].message.content.strip()
             
