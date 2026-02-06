@@ -29,6 +29,7 @@ playwright install chromium
 ```bash
 cp .env.example .env
 # .env editieren und OPENAI_API_KEY eintragen
+# optional fuer Gemini Discovery Endpoint: GEMINI_API_KEY
 ```
 
 ### 4. Backend starten
@@ -187,6 +188,7 @@ sudo systemctl reload nginx
 | `/api/sources/{id}` | PATCH | Quelle aktualisieren |
 | `/api/sources/{id}` | DELETE | Quelle löschen |
 | `/api/sources/{id}/scrape` | POST | Manuell scrapen |
+| `/api/discovery/gemini` | POST | Gemini Discovery mit Google Search Grounding |
 
 ### Events Filter
 

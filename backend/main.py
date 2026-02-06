@@ -16,9 +16,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import database as db
+from gemini_discovery import discover_events, ensure_gemini_source, to_upsert_event_dict
 from scraper.models import ScrapingMode, Source, SourceStatus, SourceType
 from scraper.pipeline import ScrapingPipeline
 
@@ -183,6 +184,25 @@ class ScrapeResponse(BaseModel):
     events_new: int
     error_message: Optional[str] = None
     duration_seconds: float
+
+
+class GeminiDiscoveryRequest(BaseModel):
+    query: str
+    region: str = "hamburg"
+    days_ahead: int = 14
+    limit: int = 30
+    model: Optional[str] = None
+
+
+class GeminiDiscoveryResponse(BaseModel):
+    success: bool
+    events_found: int
+    events_new: int
+    events_saved: int
+    events_dropped: int
+    error_message: Optional[str] = None
+    model: str
+    events: list[EventResponse] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -604,6 +624,70 @@ async def delete_source(source_id: str):
 
     db.delete_source(source_id)
     return {"deleted": True}
+
+
+# ============ Gemini Discovery Endpoint ============
+
+
+@app.post("/api/discovery/gemini", response_model=GeminiDiscoveryResponse)
+async def gemini_discovery(payload: GeminiDiscoveryRequest):
+    """Discover family-friendly events via Gemini Google Search grounding."""
+    if not os.getenv("GEMINI_API_KEY"):
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+
+    query = (payload.query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+
+    region = (payload.region or "hamburg").strip().lower() or "hamburg"
+    days_ahead = max(1, min(payload.days_ahead, 60))
+    limit = max(1, min(payload.limit, 100))
+
+    source = ensure_gemini_source(region=region)
+    discovery = discover_events(
+        query=query,
+        region=region,
+        days_ahead=days_ahead,
+        limit=limit,
+        model=payload.model,
+    )
+
+    if not discovery.get("success"):
+        return {
+            "success": False,
+            "events_found": int(discovery.get("events_found", 0)),
+            "events_new": 0,
+            "events_saved": 0,
+            "events_dropped": 0,
+            "error_message": discovery.get("error_message"),
+            "model": str(discovery.get("model") or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash")),
+            "events": [],
+        }
+
+    events = discovery.get("events", [])
+    raw_found = int(discovery.get("events_found", len(events)))
+    existing_hashes = set(db.get_event_hashes())
+
+    saved_events: list[dict] = []
+    events_new = 0
+    for event in events:
+        event_dict = to_upsert_event_dict(event, source_id=source["id"])
+        if event_dict["id"] not in existing_hashes:
+            events_new += 1
+        db.upsert_event(event_dict)
+        existing_hashes.add(event_dict["id"])
+        saved_events.append({**event_dict, "is_indoor": bool(event_dict.get("is_indoor"))})
+
+    return {
+        "success": True,
+        "events_found": raw_found,
+        "events_new": events_new,
+        "events_saved": len(saved_events),
+        "events_dropped": max(raw_found - len(saved_events), 0),
+        "error_message": None,
+        "model": str(discovery.get("model") or (payload.model or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash")),
+        "events": saved_events,
+    }
 
 
 # ============ Scraping Endpoints ============
