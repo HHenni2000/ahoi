@@ -286,13 +286,20 @@ const buildQuery = (params: Record<string, unknown>) => {
 };
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message ? error.message : 'Network request failed';
+    throw new Error(`${message}. API base URL: ${API_BASE_URL}`);
+  }
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
