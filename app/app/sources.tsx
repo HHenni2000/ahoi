@@ -523,6 +523,12 @@ export default function SourcesScreen() {
             <Text style={[styles.rowUrl, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={1}>
               {item.inputUrl}
             </Text>
+            <Text style={[styles.rowCount, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+              Eintraege: {item.entriesCount}
+              {item.sourceType === 'event'
+                ? ` (Events: ${item.eventsCount})`
+                : ` (Ideen: ${item.ideasCount})`}
+            </Text>
             {item.sourceType === 'event' && (
               <View style={styles.modeRow}>
                 <Text style={[styles.modeText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
@@ -652,6 +658,7 @@ const styles = StyleSheet.create({
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { fontSize: 11 },
   rowUrl: { marginTop: 6, fontSize: 12 },
+  rowCount: { marginTop: 4, fontSize: 12 },
   modeRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   modeText: { fontSize: 12, flex: 1 },
   modeToggleCompact: { flexDirection: 'row', gap: 6 },

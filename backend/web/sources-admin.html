@@ -574,6 +574,7 @@
               source.source_type === "idea" ? "badge-type-idea" : "badge-type-event"
             )
           );
+          badges.appendChild(buildBadge(`${Number(source.entries_count || 0)} Eintraege`, "badge-status"));
           badges.appendChild(buildBadge(source.status || "pending", "badge-status"));
           top.append(title, badges);
 
@@ -592,8 +593,14 @@
 
           const meta = document.createElement("p");
           meta.className = "meta";
+          const entriesSummary =
+            source.source_type === "idea"
+              ? `ideen: ${Number(source.ideas_count || 0)}`
+              : `events: ${Number(source.events_count || 0)}`;
           const modeLabel = source.source_type === "event" ? ` | modus: ${source.scraping_mode || "html"}` : "";
-          meta.textContent = `aktiv: ${source.is_active ? "ja" : "nein"} | last scrape: ${humanDate(source.last_scraped)}${modeLabel}`;
+          meta.textContent =
+            `eintraege: ${Number(source.entries_count || 0)} (${entriesSummary})` +
+            ` | aktiv: ${source.is_active ? "ja" : "nein"} | last scrape: ${humanDate(source.last_scraped)}${modeLabel}`;
 
           const actions = document.createElement("div");
           actions.className = "card-actions";

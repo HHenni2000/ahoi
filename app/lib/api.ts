@@ -75,6 +75,9 @@ type ApiSource = {
   scraping_mode?: string | null;
   scraping_hints?: string | null;
   custom_selectors?: string | null;
+  entries_count?: number | null;
+  events_count?: number | null;
+  ideas_count?: number | null;
 };
 
 type ApiSourceDetail = ApiSource & {
@@ -273,6 +276,9 @@ const toSource = (source: ApiSource): Source => ({
   scrapingMode: (source.scraping_mode ?? 'html') as ScrapingMode,
   scrapingHints: source.scraping_hints ?? undefined,
   customSelectors: source.custom_selectors ?? undefined,
+  entriesCount: source.entries_count ?? 0,
+  eventsCount: source.events_count ?? 0,
+  ideasCount: source.ideas_count ?? 0,
 });
 
 const buildQuery = (params: Record<string, unknown>) => {

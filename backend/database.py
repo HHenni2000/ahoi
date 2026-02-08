@@ -218,6 +218,68 @@ def get_all_sources(active_only: bool = False, source_type: Optional[str] = None
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_source_entry_counts(source_ids: Optional[list[str]] = None) -> dict[str, dict[str, int]]:
+    """Get per-source entry counts across events and ideas."""
+    if source_ids is not None and len(source_ids) == 0:
+        return {}
+
+    counts: dict[str, dict[str, int]] = {}
+    if source_ids is not None:
+        counts = {
+            source_id: {"entries_count": 0, "events_count": 0, "ideas_count": 0}
+            for source_id in source_ids
+        }
+        placeholders = ", ".join("?" for _ in source_ids)
+        source_filter = f" AND source_id IN ({placeholders})"
+        source_filter_params = list(source_ids)
+    else:
+        source_filter = ""
+        source_filter_params = []
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            f"""
+            SELECT source_id, COUNT(*) AS events_count
+            FROM events
+            WHERE source_id IS NOT NULL{source_filter}
+            GROUP BY source_id
+            """,
+            source_filter_params,
+        )
+        for row in cursor.fetchall():
+            source_id = row["source_id"]
+            events_count = int(row["events_count"])
+            record = counts.setdefault(
+                source_id,
+                {"entries_count": 0, "events_count": 0, "ideas_count": 0},
+            )
+            record["events_count"] = events_count
+            record["entries_count"] += events_count
+
+        cursor.execute(
+            f"""
+            SELECT source_id, COUNT(*) AS ideas_count
+            FROM ideas
+            WHERE source_id IS NOT NULL{source_filter}
+            GROUP BY source_id
+            """,
+            source_filter_params,
+        )
+        for row in cursor.fetchall():
+            source_id = row["source_id"]
+            ideas_count = int(row["ideas_count"])
+            record = counts.setdefault(
+                source_id,
+                {"entries_count": 0, "events_count": 0, "ideas_count": 0},
+            )
+            record["ideas_count"] = ideas_count
+            record["entries_count"] += ideas_count
+
+    return counts
+
+
 def update_source(source_id: str, **kwargs) -> Optional[dict]:
     """Update source fields."""
     allowed_fields = {

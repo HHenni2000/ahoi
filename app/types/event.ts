@@ -77,6 +77,9 @@ export interface Source {
   scrapingMode: ScrapingMode;
   scrapingHints?: string;
   customSelectors?: string; // JSON string
+  entriesCount: number;
+  eventsCount: number;
+  ideasCount: number;
 }
 
 // Filter options for the feed

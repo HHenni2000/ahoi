@@ -356,6 +356,28 @@ def _to_idea_response_row(idea: dict) -> dict:
     }
 
 
+def _to_source_response_row(
+    source: dict,
+    counts_by_source_id: Optional[dict[str, dict[str, int]]] = None,
+) -> dict:
+    counts_lookup = (
+        db.get_source_entry_counts([source["id"]])
+        if counts_by_source_id is None
+        else counts_by_source_id
+    )
+    counts = counts_lookup.get(
+        source["id"],
+        {"entries_count": 0, "events_count": 0, "ideas_count": 0},
+    )
+    return {
+        **source,
+        "is_active": bool(source.get("is_active")),
+        "entries_count": int(counts.get("entries_count", 0)),
+        "events_count": int(counts.get("events_count", 0)),
+        "ideas_count": int(counts.get("ideas_count", 0)),
+    }
+
+
 # ============ Startup ============
 
 
@@ -550,7 +572,8 @@ async def get_sources(
     """Get all sources."""
     normalized_source_type = _normalize_source_type(source_type) if source_type else None
     sources = db.get_all_sources(active_only=active_only, source_type=normalized_source_type)
-    return [{**source, "is_active": bool(source.get("is_active"))} for source in sources]
+    counts_by_source_id = db.get_source_entry_counts([source["id"] for source in sources])
+    return [_to_source_response_row(source, counts_by_source_id) for source in sources]
 
 
 @app.post("/api/sources")
@@ -609,11 +632,9 @@ async def create_source(source: SourceCreate):
         )
         idea_response = _to_idea_response_row(idea_record)
 
-    return {
-        **new_source,
-        "is_active": bool(new_source.get("is_active")),
-        "idea": idea_response,
-    }
+    response = _to_source_response_row(new_source)
+    response["idea"] = idea_response
+    return response
 
 
 @app.get("/api/sources/{source_id}")
@@ -623,7 +644,7 @@ async def get_source(source_id: str):
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
 
-    response = {**source, "is_active": bool(source.get("is_active"))}
+    response = _to_source_response_row(source)
     if source.get("source_type") == "idea":
         idea = db.get_idea_by_source_id(source_id)
         response["idea"] = _to_idea_response_row(idea) if idea else None
@@ -642,7 +663,7 @@ async def update_source(source_id: str, update: SourceUpdate):
         update_data["source_type"] = _normalize_source_type(update_data["source_type"])
 
     updated = db.update_source(source_id, **update_data)
-    return {**updated, "is_active": bool(updated.get("is_active"))}
+    return _to_source_response_row(updated)
 
 
 @app.delete("/api/sources/{source_id}")
