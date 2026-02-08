@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ahoi Quellen Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f4f8f8;
+        --ink: #163038;
+        --ink-soft: #4f6971;
+        --line: #d3dee1;
+        --panel: #ffffff;
+        --accent: #137d83;
+        --accent-soft: #d9f2f2;
+        --warn: #ba4f3a;
+        --ok: #1f8f5c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(1200px 400px at 20% -50%, #e0f4f5 0%, transparent 65%),
+          radial-gradient(900px 350px at 100% 0%, #ffe9d7 0%, transparent 70%),
+          var(--bg);
+      }
+
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 18px 42px;
+      }
+
+      .hero {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 30px;
+        letter-spacing: -0.02em;
+      }
+
+      .sub {
+        margin: 0;
+        color: var(--ink-soft);
+      }
+
+      .pill {
+        align-self: flex-start;
+        border-radius: 999px;
+        padding: 10px 14px;
+        background: #0d3742;
+        color: #e4f5f7;
+        font-size: 12px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow: 0 8px 30px rgba(19, 68, 78, 0.08);
+      }
+
+      .panel h2 {
+        margin: 0 0 12px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 18px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 11px;
+      }
+
+      .field label {
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        padding: 10px 12px;
+      }
+
+      textarea {
+        min-height: 70px;
+        resize: vertical;
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      button {
+        border: none;
+        border-radius: 11px;
+        padding: 10px 13px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        color: #fff;
+        background: linear-gradient(130deg, #0f8c94, #156b78);
+      }
+
+      .btn-secondary {
+        color: var(--ink);
+        background: #eaf1f3;
+      }
+
+      .btn-danger {
+        color: #fff;
+        background: #bb5642;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .toolbar input {
+        flex: 1 1 220px;
+      }
+
+      .toolbar select,
+      .toolbar button {
+        flex: 0 0 auto;
+      }
+
+      .count {
+        margin: 0 0 12px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      .source-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .source-card {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px;
+        background: #fff;
+        display: grid;
+        gap: 8px;
+        animation: slideUp 0.22s ease-out;
+      }
+
+      .source-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 10px;
+      }
+
+      .source-name {
+        margin: 0;
+        font-weight: 600;
+      }
+
+      .badges {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .badge {
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+      }
+
+      .badge-type-event {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .badge-type-idea {
+        background: #e9f5df;
+        color: #3f8642;
+      }
+
+      .badge-status {
+        background: #eef1f2;
+        color: #45616a;
+      }
+
+      .source-url {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-soft);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .source-url a {
+        color: var(--ink-soft);
+      }
+
+      .meta {
+        margin: 0;
+        font-size: 12px;
+        color: #627c83;
+      }
+
+      .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .card-actions button {
+        padding: 7px 10px;
+        font-size: 13px;
+        border-radius: 9px;
+      }
+
+      .mini {
+        background: #edf3f4;
+        color: #29444b;
+      }
+
+      .mini.active {
+        background: #dcf2e7;
+        color: var(--ok);
+      }
+
+      .mini.warn {
+        background: #f8e2dc;
+        color: var(--warn);
+      }
+
+      .empty {
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        padding: 20px;
+        color: var(--ink-soft);
+        text-align: center;
+      }
+
+      #toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        max-width: 420px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        color: #fff;
+        background: #214f59;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(8px);
+        transition: all 0.22s ease;
+      }
+
+      #toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      #toast.error {
+        background: #a34735;
+      }
+
+      @keyframes slideUp {
+        from {
+          transform: translateY(6px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
+      @media (max-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <div>
+          <h1>ahoi Quellen Verwaltung</h1>
+          <p class="sub">Schnelles Bearbeiten von Scraping-Quellen am Laptop oder Tablet.</p>
+        </div>
+        <div class="pill">Route: <strong>/admin/sources</strong></div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2 id="form-title">Neue Terminquelle</h2>
+          <form id="source-form">
+            <input id="source-id" type="hidden" />
+
+            <div class="field">
+              <label for="source-name">Name</label>
+              <input id="source-name" required />
+            </div>
+
+            <div class="field">
+              <label for="source-url">URL</label>
+              <input id="source-url" placeholder="https://..." />
+            </div>
+
+            <div class="field">
+              <label for="source-type">Typ</label>
+              <select id="source-type">
+                <option value="event">Terminquelle</option>
+                <option value="idea">Ideenquelle</option>
+              </select>
+            </div>
+
+            <div class="field" id="scraping-mode-field">
+              <label for="scraping-mode">Scraping Modus</label>
+              <select id="scraping-mode">
+                <option value="html">Standard (HTML)</option>
+                <option value="vision">Erweitert (Vision)</option>
+              </select>
+            </div>
+
+            <div class="field" id="scraping-hints-field">
+              <label for="source-hints">Scraping Hinweise</label>
+              <textarea id="source-hints" placeholder="Optional"></textarea>
+            </div>
+
+            <label class="toggle">
+              <input id="source-active" type="checkbox" checked />
+              Quelle aktiv
+            </label>
+
+            <div class="actions">
+              <button id="save-btn" class="btn-primary" type="submit">Speichern</button>
+              <button id="cancel-btn" class="btn-secondary" type="button">Zuruecksetzen</button>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel">
+          <div class="toolbar">
+            <input id="search" placeholder="Suche nach Name oder URL" />
+            <select id="type-filter">
+              <option value="all">Alle Typen</option>
+              <option value="event">Nur Terminquellen</option>
+              <option value="idea">Nur Ideenquellen</option>
+            </select>
+            <button id="reload-btn" class="btn-secondary" type="button">Neu laden</button>
+          </div>
+          <p id="count" class="count">Lade Quellen...</p>
+          <div id="source-list" class="source-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <div id="toast"></div>
+
+    <script>
+      const state = {
+        sources: [],
+        editingType: "event",
+      };
+
+      const el = {
+        form: document.getElementById("source-form"),
+        id: document.getElementById("source-id"),
+        title: document.getElementById("form-title"),
+        name: document.getElementById("source-name"),
+        url: document.getElementById("source-url"),
+        type: document.getElementById("source-type"),
+        mode: document.getElementById("scraping-mode"),
+        hints: document.getElementById("source-hints"),
+        active: document.getElementById("source-active"),
+        modeField: document.getElementById("scraping-mode-field"),
+        hintsField: document.getElementById("scraping-hints-field"),
+        cancel: document.getElementById("cancel-btn"),
+        reload: document.getElementById("reload-btn"),
+        search: document.getElementById("search"),
+        filter: document.getElementById("type-filter"),
+        count: document.getElementById("count"),
+        list: document.getElementById("source-list"),
+        toast: document.getElementById("toast"),
+      };
+
+      function showToast(message, isError = false) {
+        el.toast.textContent = message;
+        el.toast.classList.toggle("error", isError);
+        el.toast.classList.add("show");
+        window.clearTimeout(showToast._timer);
+        showToast._timer = window.setTimeout(() => {
+          el.toast.classList.remove("show");
+        }, 2500);
+      }
+
+      async function request(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+
+        if (!response.ok) {
+          let detail = "Request fehlgeschlagen";
+          try {
+            const body = await response.json();
+            if (body && typeof body.detail === "string") {
+              detail = body.detail;
+            }
+          } catch (_err) {
+            detail = `${detail} (${response.status})`;
+          }
+          throw new Error(detail);
+        }
+
+        return response.json();
+      }
+
+      function normalizeUrl(rawValue) {
+        const value = rawValue.trim();
+        if (!value) return "";
+        const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+        try {
+          return new URL(withProtocol).toString();
+        } catch (_err) {
+          return "";
+        }
+      }
+
+      function isEditing() {
+        return Boolean(el.id.value);
+      }
+
+      function syncTypeUi() {
+        const isEvent = el.type.value === "event";
+        el.modeField.style.display = isEvent ? "flex" : "none";
+        el.hintsField.style.display = isEvent ? "flex" : "none";
+        if (!isEvent) {
+          el.mode.value = "html";
+          el.hints.value = "";
+        }
+      }
+
+      function resetForm() {
+        el.form.reset();
+        el.id.value = "";
+        el.title.textContent = "Neue Terminquelle";
+        el.type.value = "event";
+        el.type.disabled = false;
+        el.active.checked = true;
+        state.editingType = "event";
+        syncTypeUi();
+      }
+
+      async function loadSources() {
+        el.count.textContent = "Lade Quellen...";
+        try {
+          state.sources = await request("/api/sources");
+          renderSources();
+        } catch (err) {
+          el.count.textContent = "Fehler beim Laden";
+          showToast(err.message, true);
+        }
+      }
+
+      function filteredSources() {
+        const term = el.search.value.trim().toLowerCase();
+        const typeFilter = el.filter.value;
+
+        return state.sources.filter((source) => {
+          if (typeFilter !== "all" && source.source_type !== typeFilter) return false;
+          if (!term) return true;
+          return (
+            (source.name || "").toLowerCase().includes(term) ||
+            (source.input_url || "").toLowerCase().includes(term)
+          );
+        });
+      }
+
+      function buildBadge(text, cls) {
+        const badge = document.createElement("span");
+        badge.className = `badge ${cls}`;
+        badge.textContent = text;
+        return badge;
+      }
+
+      function humanDate(value) {
+        if (!value) return "nie";
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return value;
+        return parsed.toLocaleString("de-DE");
+      }
+
+      function renderSources() {
+        const items = filteredSources();
+        el.count.textContent = `${items.length} von ${state.sources.length} Quellen`;
+        el.list.innerHTML = "";
+
+        if (items.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "Keine passenden Quellen gefunden.";
+          el.list.appendChild(empty);
+          return;
+        }
+
+        for (const source of items) {
+          const card = document.createElement("article");
+          card.className = "source-card";
+
+          const top = document.createElement("div");
+          top.className = "source-top";
+
+          const title = document.createElement("p");
+          title.className = "source-name";
+          title.textContent = source.name || "(ohne Namen)";
+
+          const badges = document.createElement("div");
+          badges.className = "badges";
+          badges.appendChild(
+            buildBadge(
+              source.source_type === "idea" ? "Idee" : "Termin",
+              source.source_type === "idea" ? "badge-type-idea" : "badge-type-event"
+            )
+          );
+          badges.appendChild(buildBadge(source.status || "pending", "badge-status"));
+          top.append(title, badges);
+
+          const urlLine = document.createElement("p");
+          urlLine.className = "source-url";
+          if (source.input_url) {
+            const link = document.createElement("a");
+            link.href = source.input_url;
+            link.target = "_blank";
+            link.rel = "noreferrer noopener";
+            link.textContent = source.input_url;
+            urlLine.appendChild(link);
+          } else {
+            urlLine.textContent = "(keine URL)";
+          }
+
+          const meta = document.createElement("p");
+          meta.className = "meta";
+          const modeLabel = source.source_type === "event" ? ` | modus: ${source.scraping_mode || "html"}` : "";
+          meta.textContent = `aktiv: ${source.is_active ? "ja" : "nein"} | last scrape: ${humanDate(source.last_scraped)}${modeLabel}`;
+
+          const actions = document.createElement("div");
+          actions.className = "card-actions";
+
+          const editButton = document.createElement("button");
+          editButton.className = "mini";
+          editButton.type = "button";
+          editButton.textContent = "Bearbeiten";
+          editButton.addEventListener("click", () => startEdit(source));
+
+          const activeButton = document.createElement("button");
+          activeButton.className = `mini ${source.is_active ? "active" : "warn"}`;
+          activeButton.type = "button";
+          activeButton.textContent = source.is_active ? "Deaktivieren" : "Aktivieren";
+          activeButton.addEventListener("click", () => toggleActive(source));
+
+          const deleteButton = document.createElement("button");
+          deleteButton.className = "mini warn";
+          deleteButton.type = "button";
+          deleteButton.textContent = "Loeschen";
+          deleteButton.addEventListener("click", () => removeSource(source));
+
+          actions.append(editButton, activeButton);
+
+          if (source.source_type === "event") {
+            const scrapeButton = document.createElement("button");
+            scrapeButton.className = "mini";
+            scrapeButton.type = "button";
+            scrapeButton.textContent = "Scrape";
+            scrapeButton.addEventListener("click", () => runScrape(source));
+            actions.appendChild(scrapeButton);
+          }
+
+          actions.appendChild(deleteButton);
+          card.append(top, urlLine, meta, actions);
+          el.list.appendChild(card);
+        }
+      }
+
+      function startEdit(source) {
+        el.id.value = source.id;
+        el.title.textContent = `Quelle bearbeiten: ${source.name}`;
+        el.name.value = source.name || "";
+        el.url.value = source.input_url || "";
+        el.type.value = source.source_type || "event";
+        el.type.disabled = true;
+        el.mode.value = source.scraping_mode || "html";
+        el.hints.value = source.scraping_hints || "";
+        el.active.checked = Boolean(source.is_active);
+        state.editingType = source.source_type || "event";
+        syncTypeUi();
+      }
+
+      async function saveSource(event) {
+        event.preventDefault();
+        const name = el.name.value.trim();
+        const selectedType = el.type.value;
+        const normalizedUrl = normalizeUrl(el.url.value);
+        const editing = isEditing();
+
+        if (!name) {
+          showToast("Bitte Name eintragen.", true);
+          return;
+        }
+
+        if (selectedType === "event" && !normalizedUrl) {
+          showToast("Fuer Terminquellen ist eine gueltige URL noetig.", true);
+          return;
+        }
+
+        if (!editing && selectedType === "idea") {
+          showToast("Neue Ideenquellen bitte weiter in der App anlegen.", true);
+          return;
+        }
+
+        if (editing && selectedType !== state.editingType) {
+          showToast("Typwechsel ist hier nicht erlaubt.", true);
+          return;
+        }
+
+        const payload = {
+          name,
+          source_type: selectedType,
+          is_active: el.active.checked,
+        };
+
+        if (normalizedUrl) {
+          payload.input_url = normalizedUrl;
+        }
+
+        if (selectedType === "event") {
+          payload.scraping_mode = el.mode.value;
+          payload.scraping_hints = el.hints.value.trim() || null;
+        }
+
+        try {
+          if (editing) {
+            await request(`/api/sources/${el.id.value}`, {
+              method: "PATCH",
+              body: JSON.stringify(payload),
+            });
+            showToast("Quelle aktualisiert.");
+          } else {
+            await request("/api/sources", {
+              method: "POST",
+              body: JSON.stringify({
+                ...payload,
+                input_url: payload.input_url || "",
+              }),
+            });
+            showToast("Quelle angelegt.");
+          }
+          resetForm();
+          await loadSources();
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function toggleActive(source) {
+        try {
+          await request(`/api/sources/${source.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ is_active: !source.is_active }),
+          });
+          await loadSources();
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function removeSource(source) {
+        const confirmed = window.confirm(`Quelle "${source.name}" wirklich loeschen?`);
+        if (!confirmed) return;
+        try {
+          await request(`/api/sources/${source.id}`, { method: "DELETE" });
+          showToast("Quelle geloescht.");
+          if (el.id.value === source.id) resetForm();
+          await loadSources();
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function runScrape(source) {
+        try {
+          const result = await request(`/api/sources/${source.id}/scrape`, { method: "POST" });
+          showToast(`Scrape fertig: ${result.events_found} gefunden, ${result.events_new} neu.`);
+          await loadSources();
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      el.form.addEventListener("submit", saveSource);
+      el.cancel.addEventListener("click", resetForm);
+      el.reload.addEventListener("click", loadSources);
+      el.search.addEventListener("input", renderSources);
+      el.filter.addEventListener("change", renderSources);
+      el.type.addEventListener("change", syncTypeUi);
+
+      resetForm();
+      loadSources();
+    </script>
+  </body>
+</html>

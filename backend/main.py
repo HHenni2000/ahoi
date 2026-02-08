@@ -10,12 +10,14 @@ import re
 import uuid
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -50,6 +52,7 @@ NEARBY_REFERENCE = {
     "lat": 53.5511,
     "lng": 9.9937,
 }
+ADMIN_SOURCES_FILE = Path(__file__).parent / "web" / "sources-admin.html"
 
 
 def _read_non_negative_int_env(name: str, default: int) -> int:
@@ -382,6 +385,14 @@ async def health():
 
 
 # ============ Meta Endpoints ============
+
+
+@app.get("/admin/sources", include_in_schema=False)
+async def admin_sources_page():
+    """Serve lightweight web interface for source management."""
+    if not ADMIN_SOURCES_FILE.exists():
+        raise HTTPException(status_code=404, detail="Admin page not found")
+    return FileResponse(ADMIN_SOURCES_FILE)
 
 
 @app.get("/api/meta/nearby-reference", response_model=NearbyReferenceResponse)
