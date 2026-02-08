@@ -2,12 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -30,14 +33,15 @@ const CATEGORY_FILTERS: { key: EventCategory | 'all'; label: string }[] = [
 ];
 
 const PLACE_FILTERS: { key: PlaceFilter; label: string }[] = [
-  { key: 'all', label: 'Indoor + Outdoor' },
-  { key: 'indoor', label: 'Nur Indoor' },
-  { key: 'outdoor', label: 'Nur Outdoor' },
+  { key: 'all', label: 'Alle Orte' },
+  { key: 'indoor', label: 'Indoor' },
+  { key: 'outdoor', label: 'Outdoor' },
 ];
 
 export default function IdeasTabScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,9 +57,7 @@ export default function IdeasTabScreen() {
 
   const loadIdeas = useCallback(
     async (showSpinner = false) => {
-      if (showSpinner) {
-        setLoading(true);
-      }
+      if (showSpinner) setLoading(true);
       setErrorMessage(null);
       try {
         const data = await fetchIdeas({
@@ -69,9 +71,7 @@ export default function IdeasTabScreen() {
         setErrorMessage(message);
       } finally {
         setRefreshing(false);
-        if (showSpinner) {
-          setLoading(false);
-        }
+        if (showSpinner) setLoading(false);
       }
     },
     [categoryFilter, placeFilter]
@@ -81,28 +81,81 @@ export default function IdeasTabScreen() {
     loadIdeas(true);
   }, [loadIdeas]);
 
-  const renderPill = (
+  const getChipColor = (key: string, isSelected: boolean) => {
+    if (!isSelected) return colors.backgroundSecondary;
+    if (key in CategoryColors) return CategoryColors[key as EventCategory];
+    return colors.tint;
+  };
+
+  const renderChip = (
     key: string,
     label: string,
     isSelected: boolean,
     onPress: () => void,
-    selectedColor?: string
   ) => (
     <Pressable
       key={key}
-      style={[
-        styles.pill,
-        {
-          borderColor: isSelected ? selectedColor || '#2E8B57' : colors.border,
-          backgroundColor: isSelected ? selectedColor || '#2E8B57' : colors.background,
-        },
-      ]}
+      style={[styles.chip, { backgroundColor: getChipColor(key, isSelected) }]}
       onPress={onPress}
     >
-      <Text style={[styles.pillText, { color: isSelected ? '#FFFFFF' : colors.textSecondary }]}>
+      <Text
+        style={[
+          styles.chipText,
+          {
+            color: isSelected ? '#FFFFFF' : colors.textSecondary,
+            fontFamily: 'Nunito_600SemiBold',
+          },
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
+  );
+
+  const filterBar = (
+    <View style={[styles.filterBar, { backgroundColor: colors.background }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterScroll}
+      >
+        {CATEGORY_FILTERS.map((f) =>
+          renderChip(f.key, f.label, categoryFilter === f.key, () => setCategoryFilter(f.key))
+        )}
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        {PLACE_FILTERS.map((f) =>
+          renderChip(f.key, f.label, placeFilter === f.key, () => setPlaceFilter(f.key))
+        )}
+      </ScrollView>
+      <View style={styles.resultRow}>
+        <Text style={[styles.resultText, { color: colors.textSecondary, fontFamily: 'Nunito_600SemiBold' }]}>
+          {ideas.length} Ideen
+        </Text>
+        {hasCustomFilters && (
+          <Pressable
+            onPress={() => {
+              setCategoryFilter('all');
+              setPlaceFilter('all');
+            }}
+          >
+            <Text style={[styles.resetText, { color: colors.tint, fontFamily: 'Nunito_600SemiBold' }]}>
+              Zuruecksetzen
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+
+  const header = (
+    <View style={[styles.greetingWrap, { paddingTop: insets.top + 12, backgroundColor: colors.background }]}>
+      <Text style={[styles.greeting, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
+        Ideen fuer jederzeit
+      </Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+        Orte und Aktivitaeten ohne festen Termin
+      </Text>
+    </View>
   );
 
   return (
@@ -122,82 +175,28 @@ export default function IdeasTabScreen() {
           />
         }
         ListHeaderComponent={
-          <View style={styles.headerWrap}>
-            <View
-              style={[
-                styles.hero,
-                { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.heroTitle, { color: colors.text }]}>Ideen</Text>
-              <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-                Orte und Aktivitaeten ohne festen Termin.
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.filterCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.filterBlock}>
-                <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Kategorie</Text>
-                <View style={styles.pillsWrap}>
-                  {CATEGORY_FILTERS.map((filter) =>
-                    renderPill(
-                      filter.key,
-                      filter.label,
-                      categoryFilter === filter.key,
-                      () => setCategoryFilter(filter.key),
-                      filter.key !== 'all' ? CategoryColors[filter.key as EventCategory] : undefined
-                    )
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.filterBlock}>
-                <Text style={[styles.filterLabel, { color: colors.textSecondary }]}>Ortstyp</Text>
-                <View style={styles.pillsWrap}>
-                  {PLACE_FILTERS.map((filter) =>
-                    renderPill(
-                      filter.key,
-                      filter.label,
-                      placeFilter === filter.key,
-                      () => setPlaceFilter(filter.key)
-                    )
-                  )}
-                </View>
-              </View>
-
-              <View style={[styles.resultRow, { borderTopColor: colors.border }]}>
-                <Text style={[styles.resultText, { color: colors.textSecondary }]}>
-                  {ideas.length} Treffer
-                </Text>
-                {hasCustomFilters && (
-                  <Pressable
-                    onPress={() => {
-                      setCategoryFilter('all');
-                      setPlaceFilter('all');
-                    }}
-                    style={[styles.resetButton, { borderColor: colors.border }]}
-                  >
-                    <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Filter zuruecksetzen</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          </View>
+          <>
+            {header}
+            {filterBar}
+          </>
         }
+        stickyHeaderIndices={[0]}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             {loading ? (
               <ActivityIndicator size="large" color={colors.tint} />
             ) : (
               <>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Keine Ideen gefunden</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
+                  Keine Ideen gefunden
+                </Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                  Versuch einen anderen Filter oder komm spaeter wieder!
+                </Text>
                 {errorMessage && (
-                  <Text style={[styles.errorText, { color: colors.error }]}>{errorMessage}</Text>
+                  <Text style={[styles.errorText, { color: colors.error, fontFamily: 'Nunito_400Regular' }]}>
+                    {errorMessage}
+                  </Text>
                 )}
               </>
             )}
@@ -214,94 +213,72 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
-  headerWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 12,
-    marginBottom: 8,
+  greetingWrap: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
-  hero: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  greeting: {
+    fontSize: 28,
+    lineHeight: 36,
   },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  heroSubtitle: {
+  subtitle: {
     fontSize: 14,
-    lineHeight: 20,
+    marginTop: 4,
   },
-  filterCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 12,
+  filterBar: {
+    paddingBottom: 8,
   },
-  filterBlock: {
+  filterScroll: {
+    paddingHorizontal: 20,
     gap: 8,
+    alignItems: 'center',
   },
-  filterLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    fontWeight: '700',
-  },
-  pillsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  pill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
+  chip: {
+    paddingHorizontal: 14,
     paddingVertical: 8,
+    borderRadius: 20,
   },
-  pillText: {
+  chipText: {
     fontSize: 13,
-    fontWeight: '600',
+  },
+  divider: {
+    width: 1,
+    height: 20,
+    marginHorizontal: 4,
   },
   resultRow: {
-    borderTopWidth: 1,
-    paddingTop: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
   resultText: {
     fontSize: 13,
-    fontWeight: '600',
   },
-  resetButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  resetButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
+  resetText: {
+    fontSize: 13,
   },
   emptyState: {
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 80,
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 20,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
+    lineHeight: 20,
   },
   errorText: {
     fontSize: 12,
-    marginTop: 8,
     textAlign: 'center',
   },
 });

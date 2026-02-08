@@ -1,6 +1,7 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Compass, Lightbulb, Map, Settings } from 'lucide-react-native';
+import { Compass, Lightbulb, Map } from 'lucide-react-native';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -14,21 +15,39 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.tint,
         tabBarInactiveTintColor: colors.tabIconDefault,
+        tabBarLabelStyle: {
+          fontFamily: 'Nunito_600SemiBold',
+          fontSize: 11,
+        },
         tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor: colors.border,
+          backgroundColor: colors.card,
+          borderTopWidth: 0,
+          ...Platform.select({
+            ios: {
+              height: 80,
+              paddingBottom: 20,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: -4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 16,
+            },
+            android: {
+              elevation: 12,
+              height: 64,
+              paddingBottom: 8,
+            },
+            default: {
+              height: 60,
+              paddingBottom: 8,
+            },
+          }),
         },
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
+        headerShown: false,
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Entdecken',
-          headerTitle: 'Entdecken',
           tabBarIcon: ({ color, size }) => (
             <Compass size={size} color={color} />
           ),
@@ -38,7 +57,6 @@ export default function TabLayout() {
         name="termine"
         options={{
           title: 'Ideen',
-          headerTitle: 'Ideen',
           tabBarIcon: ({ color, size }) => (
             <Lightbulb size={size} color={color} />
           ),
@@ -50,15 +68,6 @@ export default function TabLayout() {
           title: 'Karte',
           tabBarIcon: ({ color, size }) => (
             <Map size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="sources"
-        options={{
-          title: 'Quellen',
-          tabBarIcon: ({ color, size }) => (
-            <Settings size={size} color={color} />
           ),
         }}
       />

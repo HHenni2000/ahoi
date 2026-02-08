@@ -7,42 +7,35 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // ahoi brand colors - family-friendly, Hamburg-inspired
+        // ahoi "Coastal Fresh" palette
         primary: {
-          50: '#E6F3F7',
-          100: '#CCE7EF',
-          200: '#99CFE0',
-          300: '#66B7D0',
-          400: '#339FC1',
-          500: '#0087B1', // Main brand color (Hamburg harbor blue)
-          600: '#006C8E',
-          700: '#00516A',
-          800: '#003647',
-          900: '#001B23',
+          50: '#EEF8FB',
+          100: '#D4EEF4',
+          200: '#A8DDE9',
+          300: '#7DCBDE',
+          400: '#4BAFC8',
+          500: '#1A7A94', // Deep petrol
+          600: '#156276',
+          700: '#104A59',
+          800: '#0A313B',
+          900: '#05191E',
         },
-        secondary: {
-          50: '#FFF5E6',
-          100: '#FFEBCC',
-          200: '#FFD699',
-          300: '#FFC266',
-          400: '#FFAD33',
-          500: '#FF9900', // Accent color (warm, welcoming)
-          600: '#CC7A00',
-          700: '#995C00',
-          800: '#663D00',
-          900: '#331F00',
-        },
-        // Category colors
+        // Category colors - soft pastels
         category: {
-          theater: '#9B59B6',    // Purple
-          outdoor: '#27AE60',    // Green
-          museum: '#E67E22',     // Orange
-          music: '#E91E63',      // Pink
-          sport: '#3498DB',      // Blue
-          market: '#F1C40F',     // Yellow
-          kreativ: '#FF6B6B',    // Coral
-          lesen: '#45B7D1',      // Teal
+          theater: '#A78BCA',
+          outdoor: '#5EBD8A',
+          museum: '#E8A465',
+          music: '#E87BA0',
+          sport: '#6DB3E8',
+          market: '#E8D06A',
+          kreativ: '#F09090',
+          lesen: '#6EC5DC',
         },
+      },
+      fontFamily: {
+        nunito: ['Nunito_400Regular'],
+        'nunito-semibold': ['Nunito_600SemiBold'],
+        'nunito-bold': ['Nunito_700Bold'],
       },
     },
   },

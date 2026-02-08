@@ -1,10 +1,22 @@
 import React from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { BookOpen, Clock3, Euro, Landmark, MapPin, Medal, Music, Palette, ShoppingBag, TreePine, Drama } from 'lucide-react-native';
+import {
+  BookOpen,
+  Clock,
+  Landmark,
+  MapPin,
+  Medal,
+  Music,
+  Palette,
+  ShoppingBag,
+  TreePine,
+  Drama,
+  Users,
+} from 'lucide-react-native';
 
 import { Idea, EventCategory } from '@/types/event';
-import Colors, { CategoryColors } from '@/constants/Colors';
+import Colors, { CategoryColors, CategoryPastelColors, CategoryPastelColorsDark } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 
 const CategoryIcon: Record<EventCategory, React.ComponentType<any>> = {
@@ -36,14 +48,18 @@ interface IdeaCardProps {
 export function IdeaCard({ idea }: IdeaCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const isDark = colorScheme === 'dark';
+
   const Icon = CategoryIcon[idea.category];
+  const categoryColor = CategoryColors[idea.category];
+  const pastelColor = isDark
+    ? CategoryPastelColorsDark[idea.category]
+    : CategoryPastelColors[idea.category];
 
   const normalizeUrl = (url: string) => {
     const trimmed = url.trim();
     if (!trimmed) return null;
-    if (/^https?:\/\//i.test(trimmed)) {
-      return trimmed;
-    }
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
     return `https://${trimmed}`;
   };
 
@@ -65,52 +81,68 @@ export function IdeaCard({ idea }: IdeaCardProps) {
 
   return (
     <Pressable
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+      style={[styles.card, { backgroundColor: pastelColor }]}
       onPress={handlePress}
     >
-      <View style={styles.badgeRow}>
-        <View style={[styles.badge, { backgroundColor: '#2E8B57' }]}>
-          <Text style={styles.badgeText}>Immer moeglich</Text>
-        </View>
-        <View style={[styles.badge, { backgroundColor: CategoryColors[idea.category] }]}>
-          <Icon size={14} color="#FFFFFF" />
-          <Text style={styles.badgeText}>{CategoryLabel[idea.category]}</Text>
+      {/* Colored banner header */}
+      <View style={[styles.banner, { backgroundColor: categoryColor }]}>
+        <View style={styles.bannerContent}>
+          <View style={styles.bannerLeft}>
+            <Icon size={20} color="#FFFFFF" />
+            <Text style={[styles.bannerLabel, { fontFamily: 'Nunito_600SemiBold' }]}>
+              {CategoryLabel[idea.category]}
+            </Text>
+          </View>
+          <View style={styles.bannerTag}>
+            <Text style={[styles.bannerTagText, { fontFamily: 'Nunito_600SemiBold' }]}>
+              {idea.isIndoor ? 'Indoor' : 'Outdoor'}
+            </Text>
+          </View>
         </View>
       </View>
 
-      <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-        {idea.title}
-      </Text>
-
-      <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>
-        {idea.description}
-      </Text>
-
-      <View style={styles.metaRow}>
-        <MapPin size={14} color={colors.textSecondary} />
-        <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-          {idea.location.name}
-          {idea.location.district ? ` (${idea.location.district})` : ''}
+      {/* Card body */}
+      <View style={styles.body}>
+        {/* Title */}
+        <Text style={[styles.title, { color: colors.text, fontFamily: 'Nunito_700Bold' }]} numberOfLines={2}>
+          {idea.title}
         </Text>
-      </View>
 
-      <View style={styles.metaRow}>
-        <Euro size={14} color={colors.textSecondary} />
-        <Text style={[styles.metaText, { color: colors.textSecondary }]}>{idea.priceInfo}</Text>
-      </View>
-
-      <View style={styles.metaRow}>
-        <Clock3 size={14} color={colors.textSecondary} />
-        <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-          {idea.durationMinutes ? `${idea.durationMinutes} min` : 'Dauer flexibel'}
+        {/* Description */}
+        <Text style={[styles.description, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={2}>
+          {idea.description}
         </Text>
-        <View style={[styles.tag, { backgroundColor: colors.backgroundSecondary }]}>
-          <Text style={[styles.tagText, { color: colors.textSecondary }]}>
-            {idea.isIndoor ? 'Indoor' : 'Outdoor'}
-          </Text>
+
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: isDark ? colors.border : '#F0F2F5' }]} />
+
+        {/* Meta rows */}
+        <View style={styles.metaWrap}>
+          <View style={styles.metaRow}>
+            <MapPin size={14} color={colors.textSecondary} />
+            <Text style={[styles.metaText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={1}>
+              {idea.location.name}
+              {idea.location.district ? ` · ${idea.location.district}` : ''}
+            </Text>
+          </View>
+          {idea.durationMinutes && (
+            <View style={styles.metaRow}>
+              <Clock size={14} color={colors.textSecondary} />
+              <Text style={[styles.metaText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                ca. {idea.durationMinutes} Minuten
+              </Text>
+            </View>
+          )}
         </View>
-        <View style={[styles.tag, { backgroundColor: colors.backgroundSecondary }]}>
-          <Text style={[styles.tagText, { color: colors.textSecondary }]}>{idea.ageSuitability}</Text>
+
+        {/* Bottom row: age */}
+        <View style={styles.bottomRow}>
+          <View style={styles.ageRow}>
+            <Users size={13} color={colors.textSecondary} />
+            <Text style={[styles.ageText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+              {idea.ageSuitability}
+            </Text>
+          </View>
         </View>
       </View>
     </Pressable>
@@ -121,61 +153,83 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     marginVertical: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 16,
+    elevation: 5,
   },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
+  banner: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  badge: {
+  bannerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    justifyContent: 'space-between',
   },
-  badgeText: {
+  bannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bannerLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  bannerTag: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  bannerTagText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '600',
+  },
+  body: {
+    padding: 16,
   },
   title: {
     fontSize: 18,
-    fontWeight: '700',
+    lineHeight: 24,
     marginBottom: 4,
   },
   description: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 2,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  metaWrap: {
+    gap: 8,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
+    gap: 8,
   },
   metaText: {
     fontSize: 13,
     flex: 1,
   },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '500',
+  ageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ageText: {
+    fontSize: 13,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Text, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, StyleSheet, View } from 'react-native';
 import { MapPin } from 'lucide-react-native';
 import type { Region } from 'react-native-maps';
 
@@ -31,7 +31,7 @@ export default function MapScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const overlayBackground =
-    colorScheme === 'dark' ? 'rgba(18,18,18,0.75)' : 'rgba(255,255,255,0.75)';
+    colorScheme === 'dark' ? 'rgba(15,26,36,0.8)' : 'rgba(250,250,247,0.8)';
 
   const [events, setEvents] = useState<Event[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -119,14 +119,14 @@ export default function MapScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.fallback}>
           <MapPin size={48} color={colors.textSecondary} />
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text style={[styles.title, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
             Kartenansicht nicht verfuegbar
           </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Bitte installiere `react-native-maps` und erstelle einen neuen Dev-Client.
+          <Text style={[styles.subtitle, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+            Bitte installiere react-native-maps und erstelle einen neuen Dev-Client.
           </Text>
           {mapsInitError && (
-            <Text style={[styles.note, { color: colors.textSecondary }]}>{mapsInitError}</Text>
+            <Text style={[styles.note, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>{mapsInitError}</Text>
           )}
         </View>
       </View>
@@ -145,7 +145,7 @@ export default function MapScreen() {
             }}
             title={event.title}
             description={event.location.name}
-            pinColor="#0087B1"
+            pinColor="#1A7A94"
           />
         ))}
         {ideasWithCoords.map((idea) => (
@@ -155,9 +155,9 @@ export default function MapScreen() {
               latitude: idea.location.lat as number,
               longitude: idea.location.lng as number,
             }}
-            title={`[Idee] ${idea.title}`}
+            title={`${idea.title}`}
             description={idea.location.name}
-            pinColor="#2E8B57"
+            pinColor="#5EBD8A"
           />
         ))}
       </MapViewComponent>
@@ -165,7 +165,7 @@ export default function MapScreen() {
       {loading && (
         <View style={[styles.overlay, { backgroundColor: overlayBackground }]}>
           <ActivityIndicator size="large" color={colors.tint} />
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          <Text style={[styles.subtitle, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
             Events werden geladen...
           </Text>
         </View>
@@ -174,27 +174,31 @@ export default function MapScreen() {
       {!loading && eventsWithCoords.length === 0 && ideasWithCoords.length === 0 && (
         <View style={[styles.overlay, { backgroundColor: overlayBackground }]}>
           <MapPin size={48} color={colors.textSecondary} />
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text style={[styles.title, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
             Keine Kartenpunkte
           </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Es fehlen Koordinaten fÃ¼r diese Events.
+          <Text style={[styles.subtitle, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+            Es fehlen Koordinaten fuer diese Events.
           </Text>
           {errorMessage && (
-            <Text style={[styles.note, { color: colors.error }]}>{errorMessage}</Text>
+            <Text style={[styles.note, { color: colors.error, fontFamily: 'Nunito_400Regular' }]}>{errorMessage}</Text>
           )}
         </View>
       )}
 
       {!loading && (eventsWithCoords.length > 0 || ideasWithCoords.length > 0) && (
-        <View style={[styles.legend, { backgroundColor: overlayBackground, borderColor: colors.border }]}>
+        <View style={[styles.legend, { backgroundColor: overlayBackground }]}>
           <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#0087B1' }]} />
-            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Termin</Text>
+            <View style={[styles.legendDot, { backgroundColor: '#1A7A94' }]} />
+            <Text style={[styles.legendText, { color: colors.textSecondary, fontFamily: 'Nunito_600SemiBold' }]}>
+              Termin
+            </Text>
           </View>
           <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#2E8B57' }]} />
-            <Text style={[styles.legendText, { color: colors.textSecondary }]}>Immer moeglich</Text>
+            <View style={[styles.legendDot, { backgroundColor: '#5EBD8A' }]} />
+            <Text style={[styles.legendText, { color: colors.textSecondary, fontFamily: 'Nunito_600SemiBold' }]}>
+              Jederzeit
+            </Text>
           </View>
         </View>
       )}
@@ -225,11 +229,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 22,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     textAlign: 'center',
   },
   note: {
@@ -239,26 +242,29 @@ const styles = StyleSheet.create({
   },
   legend: {
     position: 'absolute',
-    left: 12,
-    bottom: 24,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 4,
+    left: 16,
+    bottom: Platform.OS === 'ios' ? 100 : 80,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legendText: {
     fontSize: 12,
-    fontWeight: '600',
   },
 });

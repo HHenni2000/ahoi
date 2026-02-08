@@ -11,15 +11,14 @@ import {
   Palette,
   BookOpen,
   MapPin,
-  Clock,
-  Euro,
+  Calendar,
+  Users,
 } from 'lucide-react-native';
 
 import { Event, EventCategory } from '@/types/event';
-import Colors, { CategoryColors } from '@/constants/Colors';
+import Colors, { CategoryColors, CategoryPastelColors, CategoryPastelColorsDark } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 
-// Category icon mapping
 const CategoryIcon: Record<EventCategory, React.ComponentType<any>> = {
   theater: Drama,
   outdoor: TreePine,
@@ -31,7 +30,6 @@ const CategoryIcon: Record<EventCategory, React.ComponentType<any>> = {
   lesen: BookOpen,
 };
 
-// Category labels in German
 const CategoryLabel: Record<EventCategory, string> = {
   theater: 'Theater',
   outdoor: 'Outdoor',
@@ -51,11 +49,36 @@ interface EventCardProps {
 export function EventCard({ event, showTypeBadge = true }: EventCardProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const isDark = colorScheme === 'dark';
 
   const Icon = CategoryIcon[event.category];
   const categoryColor = CategoryColors[event.category];
+  const pastelColor = isDark
+    ? CategoryPastelColorsDark[event.category]
+    : CategoryPastelColors[event.category];
 
   const formatDate = (date: Date) => {
+    const now = new Date();
+    const isToday =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow =
+      date.getFullYear() === tomorrow.getFullYear() &&
+      date.getMonth() === tomorrow.getMonth() &&
+      date.getDate() === tomorrow.getDate();
+
+    const time = new Intl.DateTimeFormat('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+
+    if (isToday) return `Heute, ${time}`;
+    if (isTomorrow) return `Morgen, ${time}`;
+
     return new Intl.DateTimeFormat('de-DE', {
       weekday: 'short',
       day: 'numeric',
@@ -68,9 +91,7 @@ export function EventCard({ event, showTypeBadge = true }: EventCardProps) {
   const normalizeUrl = (url: string) => {
     const trimmed = url.trim();
     if (!trimmed) return null;
-    if (/^https?:\/\//i.test(trimmed)) {
-      return trimmed;
-    }
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
     return `https://${trimmed}`;
   };
 
@@ -92,65 +113,67 @@ export function EventCard({ event, showTypeBadge = true }: EventCardProps) {
 
   return (
     <Pressable
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+      style={[styles.card, { backgroundColor: pastelColor }]}
       onPress={handlePress}
     >
-      <View style={styles.badgeRow}>
-        {showTypeBadge ? (
-          <View style={[styles.categoryBadge, { backgroundColor: '#0087B1' }]}>
-            <Text style={styles.categoryText}>Termin</Text>
+      {/* Colored banner header */}
+      <View style={[styles.banner, { backgroundColor: categoryColor }]}>
+        <View style={styles.bannerContent}>
+          <View style={styles.bannerLeft}>
+            <Icon size={20} color="#FFFFFF" />
+            <Text style={[styles.bannerLabel, { fontFamily: 'Nunito_600SemiBold' }]}>
+              {CategoryLabel[event.category]}
+            </Text>
           </View>
-        ) : null}
-        <View style={[styles.categoryBadge, { backgroundColor: categoryColor }]}>
-          <Icon size={14} color="#FFFFFF" />
-          <Text style={styles.categoryText}>{CategoryLabel[event.category]}</Text>
+          {event.isIndoor !== undefined && (
+            <View style={styles.bannerTag}>
+              <Text style={[styles.bannerTagText, { fontFamily: 'Nunito_600SemiBold' }]}>
+                {event.isIndoor ? 'Indoor' : 'Outdoor'}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
-      {/* Title */}
-      <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-        {event.title}
-      </Text>
-
-      {/* Description */}
-      {event.description && (
-        <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>
-          {event.description}
+      {/* Card body */}
+      <View style={styles.body}>
+        {/* Title */}
+        <Text style={[styles.title, { color: colors.text, fontFamily: 'Nunito_700Bold' }]} numberOfLines={2}>
+          {event.title}
         </Text>
-      )}
 
-      {/* Meta Info */}
-      <View style={styles.metaContainer}>
-        {/* Date */}
-        <View style={styles.metaRow}>
-          <Clock size={14} color={colors.textSecondary} />
-          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {formatDate(event.dateStart)}
+        {/* Description */}
+        {event.description ? (
+          <Text style={[styles.description, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={2}>
+            {event.description}
           </Text>
-        </View>
+        ) : null}
 
-        {/* Location */}
-        <View style={styles.metaRow}>
-          <MapPin size={14} color={colors.textSecondary} />
-          <Text style={[styles.metaText, { color: colors.textSecondary }]} numberOfLines={1}>
-            {event.location.name}
-            {event.location.district && ` (${event.location.district})`}
-          </Text>
-        </View>
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: isDark ? colors.border : '#F0F2F5' }]} />
 
-        {/* Price & Indoor/Outdoor */}
-        <View style={styles.metaRow}>
-          <Euro size={14} color={colors.textSecondary} />
-          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {event.priceInfo}
-          </Text>
-          <View style={[styles.tag, { backgroundColor: colors.backgroundSecondary }]}>
-            <Text style={[styles.tagText, { color: colors.textSecondary }]}>
-              {event.isIndoor ? 'Indoor' : 'Outdoor'}
+        {/* Meta rows */}
+        <View style={styles.metaWrap}>
+          <View style={styles.metaRow}>
+            <Calendar size={14} color={colors.textSecondary} />
+            <Text style={[styles.metaText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+              {formatDate(event.dateStart)}
             </Text>
           </View>
-          <View style={[styles.tag, { backgroundColor: colors.backgroundSecondary }]}>
-            <Text style={[styles.tagText, { color: colors.textSecondary }]}>
+          <View style={styles.metaRow}>
+            <MapPin size={14} color={colors.textSecondary} />
+            <Text style={[styles.metaText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={1}>
+              {event.location.name}
+              {event.location.district ? ` · ${event.location.district}` : ''}
+            </Text>
+          </View>
+        </View>
+
+        {/* Bottom row: age */}
+        <View style={styles.bottomRow}>
+          <View style={styles.ageRow}>
+            <Users size={13} color={colors.textSecondary} />
+            <Text style={[styles.ageText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
               {event.ageSuitability}
             </Text>
           </View>
@@ -164,63 +187,83 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
     marginVertical: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 16,
+    elevation: 5,
   },
-  categoryBadge: {
+  banner: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  bannerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    justifyContent: 'space-between',
   },
-  badgeRow: {
+  bannerLeft: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
   },
-  categoryText: {
+  bannerLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  bannerTag: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  bannerTagText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '600',
+  },
+  body: {
+    padding: 16,
   },
   title: {
     fontSize: 18,
-    fontWeight: '700',
+    lineHeight: 24,
     marginBottom: 4,
   },
   description: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 2,
   },
-  metaContainer: {
-    gap: 6,
+  divider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  metaWrap: {
+    gap: 8,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   metaText: {
     fontSize: 13,
     flex: 1,
   },
-  tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '500',
+  ageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ageText: {
+    fontSize: 13,
   },
 });

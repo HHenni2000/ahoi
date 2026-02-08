@@ -1,47 +1,73 @@
-// ahoi color scheme - family-friendly, Hamburg-inspired
+// ahoi "Coastal Fresh" color scheme
+// Scandinavian-minimal, Hamburg-inspired
 
-const primary = '#0087B1'; // Hamburg harbor blue
-const secondary = '#FF9900'; // Warm accent
+import { EventCategory } from '@/types/event';
 
-// Category colors for event types
-export const CategoryColors = {
-  theater: '#9B59B6',    // Purple
-  outdoor: '#27AE60',    // Green
-  museum: '#E67E22',     // Orange
-  music: '#E91E63',      // Pink
-  sport: '#3498DB',      // Blue
-  market: '#F1C40F',     // Yellow
-  kreativ: '#FF6B6B',    // Coral
-  lesen: '#45B7D1',      // Teal
+const primary = '#1A7A94'; // Deep petrol
+
+// Category colors - softer pastels
+export const CategoryColors: Record<EventCategory, string> = {
+  theater: '#A78BCA',
+  outdoor: '#5EBD8A',
+  museum: '#E8A465',
+  music: '#E87BA0',
+  sport: '#6DB3E8',
+  market: '#E8D06A',
+  kreativ: '#F09090',
+  lesen: '#6EC5DC',
+} as const;
+
+// Pastel backgrounds for cards per category
+export const CategoryPastelColors: Record<EventCategory, string> = {
+  theater: '#F5F0FA',
+  outdoor: '#EEFAF3',
+  museum: '#FDF5EC',
+  music: '#FDF0F5',
+  sport: '#EEF5FD',
+  market: '#FDFAEC',
+  kreativ: '#FDF0F0',
+  lesen: '#EEFAFD',
+} as const;
+
+// Dark mode pastel backgrounds
+export const CategoryPastelColorsDark: Record<EventCategory, string> = {
+  theater: '#1E1528',
+  outdoor: '#0F2018',
+  museum: '#241A0F',
+  music: '#24101A',
+  sport: '#0F1824',
+  market: '#24200F',
+  kreativ: '#241010',
+  lesen: '#0F1E24',
 } as const;
 
 export default {
   light: {
-    text: '#1A1A1A',
-    textSecondary: '#666666',
-    background: '#FFFFFF',
-    backgroundSecondary: '#F5F5F5',
+    text: '#1A2B3C',
+    textSecondary: '#7A8B9A',
+    background: '#FAFAF7',
+    backgroundSecondary: '#F2F0EB',
     tint: primary,
-    tabIconDefault: '#CCCCCC',
+    tabIconDefault: '#B8C5D0',
     tabIconSelected: primary,
-    border: '#E0E0E0',
+    border: '#E8ECF0',
     card: '#FFFFFF',
-    success: '#27AE60',
-    error: '#E74C3C',
-    warning: '#F1C40F',
+    success: '#5EBD8A',
+    error: '#E87B7B',
+    warning: '#E8D06A',
   },
   dark: {
-    text: '#FFFFFF',
-    textSecondary: '#A0A0A0',
-    background: '#121212',
-    backgroundSecondary: '#1E1E1E',
-    tint: '#4DB8D9',
-    tabIconDefault: '#666666',
-    tabIconSelected: '#4DB8D9',
-    border: '#333333',
-    card: '#1E1E1E',
-    success: '#2ECC71',
-    error: '#E74C3C',
-    warning: '#F1C40F',
+    text: '#F0F4F8',
+    textSecondary: '#8899AA',
+    background: '#0F1A24',
+    backgroundSecondary: '#1A2634',
+    tint: '#3DB8D9',
+    tabIconDefault: '#4A5A6A',
+    tabIconSelected: '#3DB8D9',
+    border: '#2A3A4A',
+    card: '#1E2D3D',
+    success: '#5EBD8A',
+    error: '#E87B7B',
+    warning: '#E8D06A',
   },
 };

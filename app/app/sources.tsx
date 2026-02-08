@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react-native';
 
-import Colors from '@/constants/Colors';
+import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
   createSource,
@@ -351,153 +352,128 @@ export default function SourcesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.form, { borderBottomColor: colors.border }]}>
-        <View
-          style={[
-            styles.discoveryCard,
-            { borderColor: colors.border, backgroundColor: colors.backgroundSecondary },
-          ]}
-        >
-          <Text style={[styles.discoveryTitle, { color: colors.text }]}>Gemini Discovery (Google Search)</Text>
-          <Text style={[styles.discoveryHint, { color: colors.textSecondary }]}>
-            Fokus: Wanderbuehnen, Zirkus und Puppentheater in Hamburg (naechste 14 Tage).
+      <ScrollView style={styles.formScroll} contentContainerStyle={styles.formContent}>
+        <View style={[styles.discoveryCard, { backgroundColor: colors.backgroundSecondary }]}>
+          <Text style={[styles.discoveryTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
+            Gemini Discovery
+          </Text>
+          <Text style={[styles.discoveryHint, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+            Wanderbuehnen, Zirkus und Puppentheater in Hamburg (14 Tage).
           </Text>
           <Pressable
-            style={[styles.discoveryButton, geminiLoading && { opacity: 0.7 }]}
+            style={[styles.discoveryButton, { backgroundColor: colors.tint }, geminiLoading && { opacity: 0.7 }]}
             disabled={geminiLoading}
             onPress={() => void handleGeminiDiscovery()}
           >
             {geminiLoading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.discoveryButtonText}>Gemini Discovery starten</Text>
+              <Text style={[styles.discoveryButtonText, { fontFamily: 'Nunito_700Bold' }]}>Discovery starten</Text>
             )}
           </Pressable>
-          <View style={[styles.trackingCard, { borderColor: colors.border }]}>
-            <Text style={[styles.trackingTitle, { color: colors.text }]}>Letzter Tracking-Lauf</Text>
-            {lastGeminiRun ? (
-              <>
-                <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                  Stage 1 Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw,{' '}
-                  {lastGeminiRun.stages.search.groundingUrlCount} Quellen
-                </Text>
-                <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                  Stage 2 Normalisierung: {lastGeminiRun.stages.normalization.eventsNormalized} normalisiert,{' '}
-                  {lastGeminiRun.stages.normalization.eventsDroppedValidation} verworfen
-                </Text>
-                <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                  Stage 3 Persistenz: {lastGeminiRun.stages.persistence.eventsSaved} gespeichert,{' '}
-                  {lastGeminiRun.stages.persistence.eventsNew} neu,{' '}
-                  {lastGeminiRun.stages.persistence.eventsExisting} bereits vorhanden
-                </Text>
-              </>
-            ) : (
-              <Text style={[styles.trackingLine, { color: colors.textSecondary }]}>
-                Noch kein Discovery-Lauf vorhanden.
+          {lastGeminiRun && (
+            <View style={[styles.trackingCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.trackingTitle, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
+                Letzter Lauf
               </Text>
-            )}
-            <Pressable
-              style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
-              onPress={handleShowGeminiTracking}
-            >
-              <Text style={[styles.trackingButtonText, { color: colors.text }]}>Tracking Details anzeigen</Text>
-            </Pressable>
-          </View>
+              <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw, {lastGeminiRun.stages.search.groundingUrlCount} Quellen
+              </Text>
+              <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                Normalisiert: {lastGeminiRun.stages.normalization.eventsNormalized}, Verworfen: {lastGeminiRun.stages.normalization.eventsDroppedValidation}
+              </Text>
+              <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                Gespeichert: {lastGeminiRun.stages.persistence.eventsSaved}, Neu: {lastGeminiRun.stages.persistence.eventsNew}
+              </Text>
+              <Pressable
+                style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={handleShowGeminiTracking}
+              >
+                <Text style={[styles.trackingButtonText, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
+                  Details anzeigen
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         <View style={styles.toggleRow}>
           <Pressable
             style={[
               styles.toggleButton,
-              sourceType === 'event' ? { backgroundColor: colors.tint } : { backgroundColor: colors.backgroundSecondary },
+              { backgroundColor: sourceType === 'event' ? colors.tint : colors.backgroundSecondary },
             ]}
             onPress={() => setSourceType('event')}
           >
-            <Text style={styles.toggleText}>Terminquelle</Text>
+            <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Terminquelle</Text>
           </Pressable>
           <Pressable
             style={[
               styles.toggleButton,
-              sourceType === 'idea' ? { backgroundColor: '#2E8B57' } : { backgroundColor: colors.backgroundSecondary },
+              { backgroundColor: sourceType === 'idea' ? CategoryColors.outdoor : colors.backgroundSecondary },
             ]}
             onPress={() => setSourceType('idea')}
           >
-            <Text style={styles.toggleText}>Ideenquelle</Text>
+            <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Ideenquelle</Text>
           </Pressable>
         </View>
 
-        <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Quellenname" placeholderTextColor={colors.textSecondary} value={newSourceName} onChangeText={setNewSourceName} />
-        <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder={sourceType === 'event' ? 'URL (Pflicht)' : 'URL (optional)'} placeholderTextColor={colors.textSecondary} value={newUrl} onChangeText={setNewUrl} autoCapitalize="none" />
+        <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Quellenname" placeholderTextColor={colors.textSecondary} value={newSourceName} onChangeText={setNewSourceName} />
+        <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder={sourceType === 'event' ? 'URL (Pflicht)' : 'URL (optional)'} placeholderTextColor={colors.textSecondary} value={newUrl} onChangeText={setNewUrl} autoCapitalize="none" />
 
         {sourceType === 'event' ? (
           <>
             <View style={styles.toggleRow}>
               <Pressable
-                style={[
-                  styles.toggleButton,
-                  newEventScrapingMode === 'html'
-                    ? { backgroundColor: colors.tint }
-                    : { backgroundColor: colors.backgroundSecondary },
-                ]}
+                style={[styles.toggleButton, { backgroundColor: newEventScrapingMode === 'html' ? colors.tint : colors.backgroundSecondary }]}
                 onPress={() => setNewEventScrapingMode('html')}
               >
-                <Text style={styles.toggleText}>Standard (HTML)</Text>
+                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Standard (HTML)</Text>
               </Pressable>
               <Pressable
-                style={[
-                  styles.toggleButton,
-                  newEventScrapingMode === 'vision'
-                    ? { backgroundColor: colors.tint }
-                    : { backgroundColor: colors.backgroundSecondary },
-                ]}
+                style={[styles.toggleButton, { backgroundColor: newEventScrapingMode === 'vision' ? colors.tint : colors.backgroundSecondary }]}
                 onPress={() => setNewEventScrapingMode('vision')}
               >
-                <Text style={styles.toggleText}>Erweitert (Vision)</Text>
+                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Erweitert (Vision)</Text>
               </Pressable>
             </View>
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Scraping-Hinweise (optional)" placeholderTextColor={colors.textSecondary} value={newHints} onChangeText={setNewHints} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Scraping-Hinweise (optional)" placeholderTextColor={colors.textSecondary} value={newHints} onChangeText={setNewHints} />
           </>
         ) : (
           <>
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Ideen-Titel" placeholderTextColor={colors.textSecondary} value={ideaTitle} onChangeText={setIdeaTitle} />
-            <TextInput style={[styles.input, styles.multiline, { borderColor: colors.border, color: colors.text }]} placeholder="Beschreibung" placeholderTextColor={colors.textSecondary} value={ideaDescription} onChangeText={setIdeaDescription} multiline />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Ort (Name)" placeholderTextColor={colors.textSecondary} value={ideaLocationName} onChangeText={setIdeaLocationName} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Adresse" placeholderTextColor={colors.textSecondary} value={ideaLocationAddress} onChangeText={setIdeaLocationAddress} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Stadtteil (optional)" placeholderTextColor={colors.textSecondary} value={ideaDistrict} onChangeText={setIdeaDistrict} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Ideen-Titel" placeholderTextColor={colors.textSecondary} value={ideaTitle} onChangeText={setIdeaTitle} />
+            <TextInput style={[styles.input, styles.multiline, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Beschreibung" placeholderTextColor={colors.textSecondary} value={ideaDescription} onChangeText={setIdeaDescription} multiline />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Ort (Name)" placeholderTextColor={colors.textSecondary} value={ideaLocationName} onChangeText={setIdeaLocationName} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Adresse" placeholderTextColor={colors.textSecondary} value={ideaLocationAddress} onChangeText={setIdeaLocationAddress} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Stadtteil (optional)" placeholderTextColor={colors.textSecondary} value={ideaDistrict} onChangeText={setIdeaDistrict} />
 
-            <FlatList
-              data={CATEGORIES}
-              horizontal
-              keyExtractor={(item) => item}
-              showsHorizontalScrollIndicator={false}
-              renderItem={({ item }) => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {CATEGORIES.map((item) => (
                 <Pressable
-                  style={[
-                    styles.chip,
-                    item === ideaCategory ? { backgroundColor: '#2E8B57' } : { backgroundColor: colors.backgroundSecondary },
-                  ]}
+                  key={item}
+                  style={[styles.chip, { backgroundColor: item === ideaCategory ? CategoryColors[item] : colors.backgroundSecondary }]}
                   onPress={() => setIdeaCategory(item)}
                 >
-                  <Text style={styles.chipText}>{item}</Text>
+                  <Text style={[styles.chipText, { fontFamily: 'Nunito_600SemiBold' }]}>{item}</Text>
                 </Pressable>
-              )}
-            />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Alter (z.B. 4+)" placeholderTextColor={colors.textSecondary} value={ideaAge} onChangeText={setIdeaAge} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Preisinfo" placeholderTextColor={colors.textSecondary} value={ideaPrice} onChangeText={setIdeaPrice} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text }]} placeholder="Dauer in Minuten (optional)" placeholderTextColor={colors.textSecondary} value={ideaDuration} onChangeText={setIdeaDuration} keyboardType="number-pad" />
+              ))}
+            </ScrollView>
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Alter (z.B. 4+)" placeholderTextColor={colors.textSecondary} value={ideaAge} onChangeText={setIdeaAge} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Preisinfo" placeholderTextColor={colors.textSecondary} value={ideaPrice} onChangeText={setIdeaPrice} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Dauer in Minuten (optional)" placeholderTextColor={colors.textSecondary} value={ideaDuration} onChangeText={setIdeaDuration} keyboardType="number-pad" />
 
             <View style={styles.toggleRow}>
               <Pressable
-                style={[styles.toggleButton, ideaIndoor ? { backgroundColor: colors.tint } : { backgroundColor: colors.backgroundSecondary }]}
+                style={[styles.toggleButton, { backgroundColor: ideaIndoor ? colors.tint : colors.backgroundSecondary }]}
                 onPress={() => setIdeaIndoor(true)}
               >
-                <Text style={styles.toggleText}>Indoor</Text>
+                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Indoor</Text>
               </Pressable>
               <Pressable
-                style={[styles.toggleButton, !ideaIndoor ? { backgroundColor: '#2E8B57' } : { backgroundColor: colors.backgroundSecondary }]}
+                style={[styles.toggleButton, { backgroundColor: !ideaIndoor ? CategoryColors.outdoor : colors.backgroundSecondary }]}
                 onPress={() => setIdeaIndoor(false)}
               >
-                <Text style={styles.toggleText}>Outdoor</Text>
+                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Outdoor</Text>
               </Pressable>
             </View>
           </>
@@ -506,7 +482,7 @@ export default function SourcesScreen() {
         <Pressable
           style={[
             styles.addButton,
-            { backgroundColor: sourceType === 'event' ? colors.tint : '#2E8B57' },
+            { backgroundColor: sourceType === 'event' ? colors.tint : CategoryColors.outdoor },
             saving && { opacity: 0.7 },
           ]}
           disabled={saving || (sourceType === 'idea' && !isIdeaFormValid)}
@@ -517,11 +493,13 @@ export default function SourcesScreen() {
           ) : (
             <>
               <Plus size={16} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>{editingIdeaId ? 'Aktualisieren' : 'Speichern'}</Text>
+              <Text style={[styles.addButtonText, { fontFamily: 'Nunito_700Bold' }]}>
+                {editingIdeaId ? 'Aktualisieren' : 'Speichern'}
+              </Text>
             </>
           )}
         </Pressable>
-      </View>
+      </ScrollView>
 
       <FlatList
         data={sources}
@@ -531,46 +509,37 @@ export default function SourcesScreen() {
           setRefreshing(true);
           void loadSources();
         }}
+        style={styles.list}
         renderItem={({ item }) => (
-          <View style={[styles.rowCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <View style={[styles.rowCard, { backgroundColor: colors.card }]}>
             <View style={styles.rowTop}>
-              <Text style={[styles.rowTitle, { color: colors.text }]}>{item.name}</Text>
-              <View style={[styles.badge, { backgroundColor: item.sourceType === 'event' ? colors.tint + '33' : '#2E8B5733' }]}>
-                <Text style={[styles.badgeText, { color: item.sourceType === 'event' ? colors.tint : '#2E8B57' }]}>
-                  {item.sourceType === 'event' ? 'Terminquelle' : 'Ideenquelle'}
+              <Text style={[styles.rowTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>{item.name}</Text>
+              <View style={[styles.badge, { backgroundColor: item.sourceType === 'event' ? colors.tint + '20' : CategoryColors.outdoor + '20' }]}>
+                <Text style={[styles.badgeText, { color: item.sourceType === 'event' ? colors.tint : CategoryColors.outdoor, fontFamily: 'Nunito_600SemiBold' }]}>
+                  {item.sourceType === 'event' ? 'Termin' : 'Idee'}
                 </Text>
               </View>
             </View>
-            <Text style={[styles.rowUrl, { color: colors.textSecondary }]} numberOfLines={1}>
+            <Text style={[styles.rowUrl, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={1}>
               {item.inputUrl}
             </Text>
             {item.sourceType === 'event' && (
               <View style={styles.modeRow}>
-                <Text style={[styles.modeText, { color: colors.textSecondary }]}>
-                  Modus: {item.scrapingMode === 'vision' ? 'Erweitert (Vision)' : 'Standard (HTML)'}
+                <Text style={[styles.modeText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                  {item.scrapingMode === 'vision' ? 'Vision' : 'HTML'}
                 </Text>
                 <View style={styles.modeToggleCompact}>
                   <Pressable
-                    style={[
-                      styles.modeCompactButton,
-                      item.scrapingMode === 'html'
-                        ? { backgroundColor: colors.tint }
-                        : { backgroundColor: colors.backgroundSecondary },
-                    ]}
+                    style={[styles.modeCompactButton, { backgroundColor: item.scrapingMode === 'html' ? colors.tint : colors.backgroundSecondary }]}
                     onPress={() => void handleSetScrapingMode(item, 'html')}
                   >
-                    <Text style={styles.modeCompactText}>HTML</Text>
+                    <Text style={[styles.modeCompactText, { fontFamily: 'Nunito_600SemiBold' }]}>HTML</Text>
                   </Pressable>
                   <Pressable
-                    style={[
-                      styles.modeCompactButton,
-                      item.scrapingMode === 'vision'
-                        ? { backgroundColor: colors.tint }
-                        : { backgroundColor: colors.backgroundSecondary },
-                    ]}
+                    style={[styles.modeCompactButton, { backgroundColor: item.scrapingMode === 'vision' ? colors.tint : colors.backgroundSecondary }]}
                     onPress={() => void handleSetScrapingMode(item, 'vision')}
                   >
-                    <Text style={styles.modeCompactText}>Vision</Text>
+                    <Text style={[styles.modeCompactText, { fontFamily: 'Nunito_600SemiBold' }]}>Vision</Text>
                   </Pressable>
                 </View>
               </View>
@@ -590,7 +559,7 @@ export default function SourcesScreen() {
               )}
               {item.sourceType === 'idea' && (
                 <Pressable
-                  style={[styles.actionButton, { backgroundColor: '#2E8B57' }]}
+                  style={[styles.actionButton, { backgroundColor: CategoryColors.outdoor }]}
                   onPress={() => void handleEditIdea(item)}
                 >
                   <Pencil size={14} color="#FFFFFF" />
@@ -608,8 +577,14 @@ export default function SourcesScreen() {
               <ActivityIndicator size="large" color={colors.tint} />
             ) : (
               <>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Keine Quellen vorhanden</Text>
-                {errorMessage ? <Text style={[styles.errorText, { color: colors.error }]}>{errorMessage}</Text> : null}
+                <Text style={[styles.emptyText, { color: colors.textSecondary, fontFamily: 'Nunito_600SemiBold' }]}>
+                  Keine Quellen vorhanden
+                </Text>
+                {errorMessage ? (
+                  <Text style={[styles.errorText, { color: colors.error, fontFamily: 'Nunito_400Regular' }]}>
+                    {errorMessage}
+                  </Text>
+                ) : null}
               </>
             )}
           </View>
@@ -621,79 +596,69 @@ export default function SourcesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  form: { borderBottomWidth: 1, padding: 12, gap: 8 },
-  discoveryCard: { borderWidth: 1, borderRadius: 10, padding: 10, gap: 8, marginBottom: 4 },
-  discoveryTitle: { fontSize: 13, fontWeight: '700' },
-  discoveryHint: { fontSize: 12, lineHeight: 16 },
+  formScroll: { maxHeight: '50%' },
+  formContent: { padding: 16, gap: 10 },
+  discoveryCard: { borderRadius: 16, padding: 14, gap: 10 },
+  discoveryTitle: { fontSize: 15 },
+  discoveryHint: { fontSize: 13, lineHeight: 18 },
   discoveryButton: {
-    borderRadius: 8,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2F6BFF',
   },
-  discoveryButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  trackingCard: { borderWidth: 1, borderRadius: 8, padding: 8, gap: 4 },
-  trackingTitle: { fontSize: 12, fontWeight: '700' },
-  trackingLine: { fontSize: 11, lineHeight: 15 },
+  discoveryButtonText: { color: '#FFFFFF', fontSize: 14 },
+  trackingCard: { borderRadius: 12, padding: 10, gap: 4 },
+  trackingTitle: { fontSize: 13 },
+  trackingLine: { fontSize: 12, lineHeight: 16 },
   trackingButton: {
-    marginTop: 4,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    marginTop: 6,
+    borderRadius: 10,
+    paddingVertical: 8,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  trackingButtonText: { fontSize: 12, fontWeight: '700' },
+  trackingButtonText: { fontSize: 12 },
   toggleRow: { flexDirection: 'row', gap: 8 },
-  toggleButton: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
-  toggleText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
-  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 13 },
-  multiline: { minHeight: 64, textAlignVertical: 'top' },
-  chip: { borderRadius: 12, paddingVertical: 5, paddingHorizontal: 9, marginRight: 6 },
-  chipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  toggleButton: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, flex: 1, alignItems: 'center' },
+  toggleText: { color: '#FFFFFF', fontSize: 13 },
+  input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
+  multiline: { minHeight: 72, textAlignVertical: 'top' },
+  chipScroll: { flexGrow: 0 },
+  chip: { borderRadius: 14, paddingVertical: 7, paddingHorizontal: 12, marginRight: 8 },
+  chipText: { color: '#FFFFFF', fontSize: 12 },
   addButton: {
-    borderRadius: 8,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 6,
-  },
-  addButtonText: { color: '#FFFFFF', fontWeight: '700' },
-  rowCard: { borderWidth: 1, borderRadius: 10, marginHorizontal: 12, marginVertical: 6, padding: 10 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  rowTitle: { flex: 1, fontWeight: '700', fontSize: 14 },
-  badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  rowUrl: { marginTop: 6, fontSize: 12 },
-  modeRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
   },
-  modeText: {
-    fontSize: 12,
-    flex: 1,
+  addButtonText: { color: '#FFFFFF', fontSize: 14 },
+  list: { flex: 1 },
+  rowCard: {
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  modeToggleCompact: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  modeCompactButton: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  modeCompactText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  rowActions: { marginTop: 8, flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
-  actionButton: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  rowTitle: { flex: 1, fontSize: 14 },
+  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { fontSize: 11 },
+  rowUrl: { marginTop: 6, fontSize: 12 },
+  modeRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  modeText: { fontSize: 12, flex: 1 },
+  modeToggleCompact: { flexDirection: 'row', gap: 6 },
+  modeCompactButton: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  modeCompactText: { color: '#FFFFFF', fontSize: 11 },
+  rowActions: { marginTop: 10, flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+  actionButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 70 },
   emptyText: { fontSize: 16 },
   errorText: { marginTop: 6, fontSize: 12 },

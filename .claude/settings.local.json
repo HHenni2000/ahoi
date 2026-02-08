@@ -22,7 +22,11 @@
       "Bash(netstat:*)",
       "Bash(curl:*)",
       "Bash(test:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(npx expo install:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
