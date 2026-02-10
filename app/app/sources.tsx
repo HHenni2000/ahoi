@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,16 +11,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react-native';
+import { Pencil, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react-native';
 
 import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
+  autofillIdea,
   createSource,
   discoverEventsWithGemini,
   deleteSource,
   fetchSourceById,
   fetchSources,
+  scrapeAllSources,
   scrapeSource,
   updateIdea,
   updateSource,
@@ -79,10 +82,24 @@ export default function SourcesScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [scrapingSourceId, setScrapingSourceId] = useState<string | null>(null);
+  const [scrapingAll, setScrapingAll] = useState(false);
   const [geminiLoading, setGeminiLoading] = useState(false);
   const [lastGeminiRun, setLastGeminiRun] = useState<GeminiDiscoveryResult | null>(null);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
+  const [formModalVisible, setFormModalVisible] = useState(false);
+  const [autofilling, setAutofilling] = useState(false);
+  const [showIdeaDetails, setShowIdeaDetails] = useState(false);
+
+  const geminiSource = useMemo(
+    () => sources.find((s) => s.inputUrl.startsWith('manual://gemini')),
+    [sources]
+  );
+
+  const filteredSources = useMemo(
+    () => sources.filter((s) => !s.inputUrl.startsWith('manual://')),
+    [sources]
+  );
 
   const isIdeaFormValid = useMemo(
     () =>
@@ -133,6 +150,18 @@ export default function SourcesScreen() {
     setIdeaIndoor(false);
     setEditingSourceId(null);
     setEditingIdeaId(null);
+    setShowIdeaDetails(false);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setSourceType('event');
+    setFormModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setFormModalVisible(false);
+    resetForm();
   };
 
   const handleAddSource = async () => {
@@ -197,7 +226,7 @@ export default function SourcesScreen() {
         }
       }
 
-      resetForm();
+      closeModal();
       await loadSources(true);
       Alert.alert('Erfolg', 'Quelle wurde gespeichert');
     } catch (error) {
@@ -220,6 +249,62 @@ export default function SourcesScreen() {
       Alert.alert('Fehler', message);
     } finally {
       setScrapingSourceId(null);
+    }
+  };
+
+  const handleScrapeAll = async () => {
+    setScrapingAll(true);
+    try {
+      const result = await scrapeAllSources();
+      await loadSources(true);
+      Alert.alert(
+        'Alle Quellen aktualisiert',
+        `Quellen: ${result.sources_scraped}/${result.sources_total} erfolgreich\nGefunden: ${result.total_events_found}\nNeu: ${result.total_events_new}${result.sources_failed > 0 ? `\nFehlgeschlagen: ${result.sources_failed}` : ''}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Quellen konnten nicht aktualisiert werden.';
+      Alert.alert('Fehler', message);
+    } finally {
+      setScrapingAll(false);
+    }
+  };
+
+  const handleAutofill = async () => {
+    const name = newSourceName.trim();
+    if (!name) {
+      Alert.alert('Fehler', 'Bitte gib einen Namen ein');
+      return;
+    }
+    setAutofilling(true);
+    try {
+      const url = newUrl.trim() || undefined;
+      const result = await autofillIdea({ name, url });
+      if (!result.success) {
+        Alert.alert('Fehler', result.error_message ?? 'Autofill fehlgeschlagen');
+        return;
+      }
+      if (result.title) setIdeaTitle(result.title);
+      if (result.description) setIdeaDescription(result.description);
+      if (result.location_name) setIdeaLocationName(result.location_name);
+      if (result.location_address) setIdeaLocationAddress(result.location_address);
+      if (result.location_district) setIdeaDistrict(result.location_district);
+      if (result.category) {
+        const cat = result.category as EventCategory;
+        if (['theater', 'outdoor', 'museum', 'music', 'sport', 'market', 'kreativ', 'lesen'].includes(cat)) {
+          setIdeaCategory(cat);
+        }
+      }
+      if (result.is_indoor != null) setIdeaIndoor(result.is_indoor);
+      if (result.age_suitability) setIdeaAge(result.age_suitability);
+      if (result.price_info) setIdeaPrice(result.price_info);
+      if (result.duration_minutes) setIdeaDuration(String(result.duration_minutes));
+      if (result.original_link && !newUrl.trim()) setNewUrl(result.original_link);
+      setShowIdeaDetails(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Autofill fehlgeschlagen';
+      Alert.alert('Fehler', message);
+    } finally {
+      setAutofilling(false);
     }
   };
 
@@ -333,6 +418,8 @@ export default function SourcesScreen() {
       setIdeaPrice(detail.idea.priceInfo);
       setIdeaDuration(detail.idea.durationMinutes ? String(detail.idea.durationMinutes) : '');
       setIdeaIndoor(detail.idea.isIndoor);
+      setShowIdeaDetails(true);
+      setFormModalVisible(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Idee konnte nicht geladen werden.';
       Alert.alert('Fehler', message);
@@ -352,157 +439,8 @@ export default function SourcesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView style={styles.formScroll} contentContainerStyle={styles.formContent}>
-        <View style={[styles.discoveryCard, { backgroundColor: colors.backgroundSecondary }]}>
-          <Text style={[styles.discoveryTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
-            Gemini Discovery
-          </Text>
-          <Text style={[styles.discoveryHint, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
-            Wanderbuehnen, Zirkus und Puppentheater in Hamburg (14 Tage).
-          </Text>
-          <Pressable
-            style={[styles.discoveryButton, { backgroundColor: colors.tint }, geminiLoading && { opacity: 0.7 }]}
-            disabled={geminiLoading}
-            onPress={() => void handleGeminiDiscovery()}
-          >
-            {geminiLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={[styles.discoveryButtonText, { fontFamily: 'Nunito_700Bold' }]}>Discovery starten</Text>
-            )}
-          </Pressable>
-          {lastGeminiRun && (
-            <View style={[styles.trackingCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.trackingTitle, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
-                Letzter Lauf
-              </Text>
-              <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
-                Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw, {lastGeminiRun.stages.search.groundingUrlCount} Quellen
-              </Text>
-              <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
-                Normalisiert: {lastGeminiRun.stages.normalization.eventsNormalized}, Verworfen: {lastGeminiRun.stages.normalization.eventsDroppedValidation}
-              </Text>
-              <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
-                Gespeichert: {lastGeminiRun.stages.persistence.eventsSaved}, Neu: {lastGeminiRun.stages.persistence.eventsNew}
-              </Text>
-              <Pressable
-                style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={handleShowGeminiTracking}
-              >
-                <Text style={[styles.trackingButtonText, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
-                  Details anzeigen
-                </Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.toggleRow}>
-          <Pressable
-            style={[
-              styles.toggleButton,
-              { backgroundColor: sourceType === 'event' ? colors.tint : colors.backgroundSecondary },
-            ]}
-            onPress={() => setSourceType('event')}
-          >
-            <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Terminquelle</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.toggleButton,
-              { backgroundColor: sourceType === 'idea' ? CategoryColors.outdoor : colors.backgroundSecondary },
-            ]}
-            onPress={() => setSourceType('idea')}
-          >
-            <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Ideenquelle</Text>
-          </Pressable>
-        </View>
-
-        <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Quellenname" placeholderTextColor={colors.textSecondary} value={newSourceName} onChangeText={setNewSourceName} />
-        <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder={sourceType === 'event' ? 'URL (Pflicht)' : 'URL (optional)'} placeholderTextColor={colors.textSecondary} value={newUrl} onChangeText={setNewUrl} autoCapitalize="none" />
-
-        {sourceType === 'event' ? (
-          <>
-            <View style={styles.toggleRow}>
-              <Pressable
-                style={[styles.toggleButton, { backgroundColor: newEventScrapingMode === 'html' ? colors.tint : colors.backgroundSecondary }]}
-                onPress={() => setNewEventScrapingMode('html')}
-              >
-                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Standard (HTML)</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.toggleButton, { backgroundColor: newEventScrapingMode === 'vision' ? colors.tint : colors.backgroundSecondary }]}
-                onPress={() => setNewEventScrapingMode('vision')}
-              >
-                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Erweitert (Vision)</Text>
-              </Pressable>
-            </View>
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Scraping-Hinweise (optional)" placeholderTextColor={colors.textSecondary} value={newHints} onChangeText={setNewHints} />
-          </>
-        ) : (
-          <>
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Ideen-Titel" placeholderTextColor={colors.textSecondary} value={ideaTitle} onChangeText={setIdeaTitle} />
-            <TextInput style={[styles.input, styles.multiline, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Beschreibung" placeholderTextColor={colors.textSecondary} value={ideaDescription} onChangeText={setIdeaDescription} multiline />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Ort (Name)" placeholderTextColor={colors.textSecondary} value={ideaLocationName} onChangeText={setIdeaLocationName} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Adresse" placeholderTextColor={colors.textSecondary} value={ideaLocationAddress} onChangeText={setIdeaLocationAddress} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Stadtteil (optional)" placeholderTextColor={colors.textSecondary} value={ideaDistrict} onChangeText={setIdeaDistrict} />
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-              {CATEGORIES.map((item) => (
-                <Pressable
-                  key={item}
-                  style={[styles.chip, { backgroundColor: item === ideaCategory ? CategoryColors[item] : colors.backgroundSecondary }]}
-                  onPress={() => setIdeaCategory(item)}
-                >
-                  <Text style={[styles.chipText, { fontFamily: 'Nunito_600SemiBold' }]}>{item}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Alter (z.B. 4+)" placeholderTextColor={colors.textSecondary} value={ideaAge} onChangeText={setIdeaAge} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Preisinfo" placeholderTextColor={colors.textSecondary} value={ideaPrice} onChangeText={setIdeaPrice} />
-            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Dauer in Minuten (optional)" placeholderTextColor={colors.textSecondary} value={ideaDuration} onChangeText={setIdeaDuration} keyboardType="number-pad" />
-
-            <View style={styles.toggleRow}>
-              <Pressable
-                style={[styles.toggleButton, { backgroundColor: ideaIndoor ? colors.tint : colors.backgroundSecondary }]}
-                onPress={() => setIdeaIndoor(true)}
-              >
-                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Indoor</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.toggleButton, { backgroundColor: !ideaIndoor ? CategoryColors.outdoor : colors.backgroundSecondary }]}
-                onPress={() => setIdeaIndoor(false)}
-              >
-                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Outdoor</Text>
-              </Pressable>
-            </View>
-          </>
-        )}
-
-        <Pressable
-          style={[
-            styles.addButton,
-            { backgroundColor: sourceType === 'event' ? colors.tint : CategoryColors.outdoor },
-            saving && { opacity: 0.7 },
-          ]}
-          disabled={saving || (sourceType === 'idea' && !isIdeaFormValid)}
-          onPress={handleAddSource}
-        >
-          {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <>
-              <Plus size={16} color="#FFFFFF" />
-              <Text style={[styles.addButtonText, { fontFamily: 'Nunito_700Bold' }]}>
-                {editingIdeaId ? 'Aktualisieren' : 'Speichern'}
-              </Text>
-            </>
-          )}
-        </Pressable>
-      </ScrollView>
-
       <FlatList
-        data={sources}
+        data={filteredSources}
         keyExtractor={(item) => item.id}
         refreshing={refreshing}
         onRefresh={() => {
@@ -510,6 +448,83 @@ export default function SourcesScreen() {
           void loadSources();
         }}
         style={styles.list}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View style={styles.headerSection}>
+            <View style={[styles.discoveryCard, { backgroundColor: colors.backgroundSecondary }]}>
+              <Text style={[styles.discoveryTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
+                Gemini Discovery
+              </Text>
+              <Text style={[styles.discoveryHint, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                Wanderbuehnen, Zirkus und Puppentheater in Hamburg (14 Tage).
+              </Text>
+              {geminiSource && (
+                <Text style={[styles.discoveryStats, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
+                  Eintraege: {geminiSource.entriesCount} (Events: {geminiSource.eventsCount})
+                </Text>
+              )}
+              <Pressable
+                style={[styles.discoveryButton, { backgroundColor: colors.tint }, geminiLoading && { opacity: 0.7 }]}
+                disabled={geminiLoading}
+                onPress={() => void handleGeminiDiscovery()}
+              >
+                {geminiLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.discoveryButtonText, { fontFamily: 'Nunito_700Bold' }]}>Discovery starten</Text>
+                )}
+              </Pressable>
+              {lastGeminiRun && (
+                <View style={[styles.trackingCard, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.trackingTitle, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
+                    Letzter Lauf
+                  </Text>
+                  <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                    Search: {lastGeminiRun.stages.search.eventsFoundRaw} raw, {lastGeminiRun.stages.search.groundingUrlCount} Quellen
+                  </Text>
+                  <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                    Normalisiert: {lastGeminiRun.stages.normalization.eventsNormalized}, Verworfen: {lastGeminiRun.stages.normalization.eventsDroppedValidation}
+                  </Text>
+                  <Text style={[styles.trackingLine, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                    Gespeichert: {lastGeminiRun.stages.persistence.eventsSaved}, Neu: {lastGeminiRun.stages.persistence.eventsNew}
+                  </Text>
+                  <Pressable
+                    style={[styles.trackingButton, { backgroundColor: colors.backgroundSecondary }]}
+                    onPress={handleShowGeminiTracking}
+                  >
+                    <Text style={[styles.trackingButtonText, { color: colors.text, fontFamily: 'Nunito_600SemiBold' }]}>
+                      Details anzeigen
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.actionRow}>
+              <Pressable
+                style={[styles.actionRowButton, { backgroundColor: colors.tint }]}
+                onPress={openAddModal}
+              >
+                <Plus size={16} color="#FFFFFF" />
+                <Text style={[styles.actionRowButtonText, { fontFamily: 'Nunito_700Bold' }]}>Quelle hinzufuegen</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.actionRowButton, { backgroundColor: colors.success }, scrapingAll && { opacity: 0.7 }]}
+                disabled={scrapingAll}
+                onPress={() => void handleScrapeAll()}
+              >
+                {scrapingAll ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <RefreshCw size={16} color="#FFFFFF" />
+                    <Text style={[styles.actionRowButtonText, { fontFamily: 'Nunito_700Bold' }]}>Alle aktualisieren</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={[styles.rowCard, { backgroundColor: colors.card }]}>
             <View style={styles.rowTop}>
@@ -596,17 +611,169 @@ export default function SourcesScreen() {
           </View>
         }
       />
+
+      <Modal
+        visible={formModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeModal}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
+              {editingIdeaId ? 'Idee bearbeiten' : 'Quelle hinzufuegen'}
+            </Text>
+            <Pressable style={[styles.closeButton, { backgroundColor: colors.backgroundSecondary }]} onPress={closeModal}>
+              <X size={18} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.toggleRow}>
+              <Pressable
+                style={[
+                  styles.toggleButton,
+                  { backgroundColor: sourceType === 'event' ? colors.tint : colors.backgroundSecondary },
+                ]}
+                onPress={() => setSourceType('event')}
+              >
+                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Terminquelle</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.toggleButton,
+                  { backgroundColor: sourceType === 'idea' ? CategoryColors.outdoor : colors.backgroundSecondary },
+                ]}
+                onPress={() => setSourceType('idea')}
+              >
+                <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Ideenquelle</Text>
+              </Pressable>
+            </View>
+
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Quellenname" placeholderTextColor={colors.textSecondary} value={newSourceName} onChangeText={setNewSourceName} />
+            <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder={sourceType === 'event' ? 'URL (Pflicht)' : 'URL (optional)'} placeholderTextColor={colors.textSecondary} value={newUrl} onChangeText={setNewUrl} autoCapitalize="none" />
+
+            {sourceType === 'event' ? (
+              <>
+                <View style={styles.toggleRow}>
+                  <Pressable
+                    style={[styles.toggleButton, { backgroundColor: newEventScrapingMode === 'html' ? colors.tint : colors.backgroundSecondary }]}
+                    onPress={() => setNewEventScrapingMode('html')}
+                  >
+                    <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Standard (HTML)</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.toggleButton, { backgroundColor: newEventScrapingMode === 'vision' ? colors.tint : colors.backgroundSecondary }]}
+                    onPress={() => setNewEventScrapingMode('vision')}
+                  >
+                    <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Erweitert (Vision)</Text>
+                  </Pressable>
+                </View>
+                <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Scraping-Hinweise (optional)" placeholderTextColor={colors.textSecondary} value={newHints} onChangeText={setNewHints} />
+              </>
+            ) : (
+              <>
+                <Pressable
+                  style={[styles.autofillButton, { backgroundColor: '#8B5CF6' }, autofilling && { opacity: 0.7 }]}
+                  disabled={autofilling || !newSourceName.trim()}
+                  onPress={() => void handleAutofill()}
+                >
+                  {autofilling ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <>
+                      <Sparkles size={16} color="#FFFFFF" />
+                      <Text style={[styles.autofillButtonText, { fontFamily: 'Nunito_700Bold' }]}>Mit Gemini ausfuellen</Text>
+                    </>
+                  )}
+                </Pressable>
+
+                {!showIdeaDetails && (
+                  <Pressable onPress={() => setShowIdeaDetails(true)} style={styles.manualToggle}>
+                    <Text style={[styles.manualToggleText, { color: colors.textSecondary, fontFamily: 'Nunito_600SemiBold' }]}>
+                      Manuell ausfuellen
+                    </Text>
+                  </Pressable>
+                )}
+
+                {showIdeaDetails && (
+                  <>
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Ideen-Titel" placeholderTextColor={colors.textSecondary} value={ideaTitle} onChangeText={setIdeaTitle} />
+                    <TextInput style={[styles.input, styles.multiline, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Beschreibung" placeholderTextColor={colors.textSecondary} value={ideaDescription} onChangeText={setIdeaDescription} multiline />
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Ort (Name)" placeholderTextColor={colors.textSecondary} value={ideaLocationName} onChangeText={setIdeaLocationName} />
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Adresse" placeholderTextColor={colors.textSecondary} value={ideaLocationAddress} onChangeText={setIdeaLocationAddress} />
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Stadtteil (optional)" placeholderTextColor={colors.textSecondary} value={ideaDistrict} onChangeText={setIdeaDistrict} />
+
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                      {CATEGORIES.map((item) => (
+                        <Pressable
+                          key={item}
+                          style={[styles.chip, { backgroundColor: item === ideaCategory ? CategoryColors[item] : colors.backgroundSecondary }]}
+                          onPress={() => setIdeaCategory(item)}
+                        >
+                          <Text style={[styles.chipText, { fontFamily: 'Nunito_600SemiBold' }]}>{item}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Alter (z.B. 4+)" placeholderTextColor={colors.textSecondary} value={ideaAge} onChangeText={setIdeaAge} />
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Preisinfo" placeholderTextColor={colors.textSecondary} value={ideaPrice} onChangeText={setIdeaPrice} />
+                    <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.card, fontFamily: 'Nunito_400Regular' }]} placeholder="Dauer in Minuten (optional)" placeholderTextColor={colors.textSecondary} value={ideaDuration} onChangeText={setIdeaDuration} keyboardType="number-pad" />
+
+                    <View style={styles.toggleRow}>
+                      <Pressable
+                        style={[styles.toggleButton, { backgroundColor: ideaIndoor ? colors.tint : colors.backgroundSecondary }]}
+                        onPress={() => setIdeaIndoor(true)}
+                      >
+                        <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Indoor</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.toggleButton, { backgroundColor: !ideaIndoor ? CategoryColors.outdoor : colors.backgroundSecondary }]}
+                        onPress={() => setIdeaIndoor(false)}
+                      >
+                        <Text style={[styles.toggleText, { fontFamily: 'Nunito_600SemiBold' }]}>Outdoor</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+              </>
+            )}
+
+            <Pressable
+              style={[
+                styles.addButton,
+                { backgroundColor: sourceType === 'event' ? colors.tint : CategoryColors.outdoor },
+                saving && { opacity: 0.7 },
+              ]}
+              disabled={saving || (sourceType === 'idea' && !isIdeaFormValid)}
+              onPress={handleAddSource}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Plus size={16} color="#FFFFFF" />
+                  <Text style={[styles.addButtonText, { fontFamily: 'Nunito_700Bold' }]}>
+                    {editingIdeaId ? 'Aktualisieren' : 'Speichern'}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  formScroll: { maxHeight: '50%' },
-  formContent: { padding: 16, gap: 10 },
+  list: { flex: 1 },
+  listContent: { paddingBottom: 20 },
+  headerSection: { padding: 16, gap: 12 },
   discoveryCard: { borderRadius: 16, padding: 14, gap: 10 },
   discoveryTitle: { fontSize: 15 },
   discoveryHint: { fontSize: 13, lineHeight: 18 },
+  discoveryStats: { fontSize: 13 },
   discoveryButton: {
     borderRadius: 14,
     paddingVertical: 12,
@@ -624,6 +791,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   trackingButtonText: { fontSize: 12 },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  actionRowButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  actionRowButtonText: { color: '#FFFFFF', fontSize: 13 },
+  modalContainer: { flex: 1 },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  modalTitle: { fontSize: 18 },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: { flex: 1 },
+  modalScrollContent: { padding: 16, gap: 10 },
   toggleRow: { flexDirection: 'row', gap: 8 },
   toggleButton: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, flex: 1, alignItems: 'center' },
   toggleText: { color: '#FFFFFF', fontSize: 13 },
@@ -632,6 +829,17 @@ const styles = StyleSheet.create({
   chipScroll: { flexGrow: 0 },
   chip: { borderRadius: 14, paddingVertical: 7, paddingHorizontal: 12, marginRight: 8 },
   chipText: { color: '#FFFFFF', fontSize: 12 },
+  autofillButton: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  autofillButtonText: { color: '#FFFFFF', fontSize: 13 },
+  manualToggle: { alignItems: 'center', paddingVertical: 8 },
+  manualToggleText: { fontSize: 13, textDecorationLine: 'underline' },
   addButton: {
     borderRadius: 14,
     paddingVertical: 14,
@@ -641,7 +849,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addButtonText: { color: '#FFFFFF', fontSize: 14 },
-  list: { flex: 1 },
   rowCard: {
     borderRadius: 16,
     marginHorizontal: 16,

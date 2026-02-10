@@ -4,7 +4,7 @@
     "slug": "ahhoi",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/ahoi-icon.png",
     "scheme": "ahhoi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -18,7 +18,7 @@
       "url": "https://u.expo.dev/728eda13-ca1e-4ead-9bc1-1e6f4fedf66b"
     },
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/ahoi-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FAFAF7"
     },
@@ -35,7 +35,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/ahoi-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -44,7 +44,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/ahoi-icon.png"
     },
     "extra": {
       "apiBaseUrl": "http://72.60.80.95:8000",

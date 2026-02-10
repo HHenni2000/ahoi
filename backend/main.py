@@ -109,6 +109,28 @@ class IdeaUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class IdeaAutofillRequest(BaseModel):
+    name: str
+    url: Optional[str] = None
+    region: str = "hamburg"
+
+
+class IdeaAutofillResponse(BaseModel):
+    success: bool
+    title: Optional[str] = None
+    description: Optional[str] = None
+    location_name: Optional[str] = None
+    location_address: Optional[str] = None
+    location_district: Optional[str] = None
+    category: Optional[str] = None
+    is_indoor: Optional[bool] = None
+    age_suitability: Optional[str] = None
+    price_info: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    original_link: Optional[str] = None
+    error_message: Optional[str] = None
+
+
 class SourceCreate(BaseModel):
     name: str
     input_url: str = ""
@@ -188,6 +210,15 @@ class ScrapeResponse(BaseModel):
     events_new: int
     error_message: Optional[str] = None
     duration_seconds: float
+
+
+class ScrapeAllResponse(BaseModel):
+    success: bool
+    sources_total: int
+    sources_scraped: int
+    sources_failed: int
+    total_events_found: int
+    total_events_new: int
 
 
 class GeminiDiscoveryRequest(BaseModel):
@@ -526,6 +557,163 @@ async def get_ideas(
     return [_to_idea_response_row(idea) for idea in ideas]
 
 
+# ============ Idea Autofill (Gemini) ============
+
+_IDEA_AUTOFILL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "location_name": {"type": ["string", "null"]},
+        "location_address": {"type": ["string", "null"]},
+        "location_district": {"type": ["string", "null"]},
+        "category": {
+            "type": "string",
+            "enum": ["theater", "outdoor", "museum", "music", "sport", "market", "kreativ", "lesen"],
+        },
+        "is_indoor": {"type": "boolean"},
+        "age_suitability": {"type": ["string", "null"]},
+        "price_info": {"type": ["string", "null"]},
+        "duration_minutes": {"type": ["integer", "null"]},
+        "original_link": {"type": ["string", "null"]},
+    },
+    "required": ["title", "description", "category", "is_indoor"],
+}
+
+
+def _build_idea_autofill_prompt(name: str, region: str, page_content: str | None = None) -> str:
+    base = (
+        f"Finde Informationen zu folgendem familienfreundlichen Ausflugsziel / Aktivitaet:\n"
+        f"Name: {name}\n"
+        f"Region: {region}\n\n"
+        "Gib strukturierte Informationen zurueck:\n"
+        "- title: Offizieller Name des Ausflugsziels\n"
+        "- description: Kurze Beschreibung (2-3 Saetze), was man dort machen kann, besonders fuer Familien mit Kindern\n"
+        "- location_name: Name des Ortes / Gebaeudes\n"
+        "- location_address: Vollstaendige Strasse und Hausnummer, PLZ und Stadt\n"
+        "- location_district: Stadtteil (falls in Hamburg)\n"
+        "- category: Eine von: theater, outdoor, museum, music, sport, market, kreativ, lesen\n"
+        "- is_indoor: true oder false\n"
+        "- age_suitability: Empfohlenes Mindestalter, z.B. '4+', '0+', '6+'\n"
+        "- price_info: Eintrittspreis oder 'Kostenlos' oder 'Unbekannt'\n"
+        "- duration_minutes: Typische Aufenthaltsdauer in Minuten (als Ganzzahl)\n"
+        "- original_link: Offizielle Website URL\n\n"
+        "Antworte ausschliesslich mit gueltigem JSON gemaess Schema."
+    )
+    if page_content:
+        base += (
+            "\n\nHier ist der Seiteninhalt als Referenz:\n"
+            "---\n"
+            f"{page_content[:12000]}\n"
+            "---"
+        )
+    return base
+
+
+@app.post("/api/ideas/autofill", response_model=IdeaAutofillResponse)
+async def autofill_idea(payload: IdeaAutofillRequest):
+    """Use Gemini to auto-fill idea fields from a name or URL."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    page_content: str | None = None
+    url = (payload.url or "").strip()
+
+    if url:
+        try:
+            from markdownify import markdownify as md
+            from bs4 import BeautifulSoup
+
+            resp = httpx.get(url, timeout=15.0, follow_redirects=True)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header"]):
+                tag.decompose()
+            main = soup.find("main") or soup.find("article") or soup.body or soup
+            page_content = md(str(main), strip=["img", "svg"]).strip()
+        except Exception:
+            page_content = None
+
+    model_name = os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview"
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+
+    request_body: dict[str, Any] = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": _build_idea_autofill_prompt(name, payload.region, page_content)}],
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+            "responseJsonSchema": _IDEA_AUTOFILL_SCHEMA,
+        },
+    }
+
+    if not page_content:
+        request_body["tools"] = [{"google_search": {}}]
+
+    try:
+        response = httpx.post(
+            endpoint,
+            params={"key": api_key},
+            json=request_body,
+            timeout=httpx.Timeout(60.0, connect=20.0),
+        )
+        response.raise_for_status()
+        payload_data = response.json()
+
+        candidates = payload_data.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return {"success": False, "error_message": "Keine Antwort von Gemini"}
+
+        first = candidates[0] if isinstance(candidates[0], dict) else {}
+        content = first.get("content") if isinstance(first.get("content"), dict) else {}
+        parts = content.get("parts", [])
+        text_parts = [p["text"] for p in parts if isinstance(p, dict) and isinstance(p.get("text"), str)]
+        text = "\n".join(text_parts).strip()
+
+        if not text:
+            return {"success": False, "error_message": "Leere Antwort von Gemini"}
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.IGNORECASE | re.DOTALL)
+            if not match:
+                return {"success": False, "error_message": "Gemini-Antwort konnte nicht geparst werden"}
+            data = json.loads(match.group(1).strip())
+
+        if not isinstance(data, dict):
+            return {"success": False, "error_message": "Unerwartetes Antwortformat"}
+
+        return {
+            "success": True,
+            "title": data.get("title"),
+            "description": data.get("description"),
+            "location_name": data.get("location_name"),
+            "location_address": data.get("location_address"),
+            "location_district": data.get("location_district"),
+            "category": data.get("category"),
+            "is_indoor": data.get("is_indoor"),
+            "age_suitability": data.get("age_suitability"),
+            "price_info": data.get("price_info"),
+            "duration_minutes": data.get("duration_minutes"),
+            "original_link": data.get("original_link") or (url if url else None),
+        }
+
+    except httpx.TimeoutException:
+        return {"success": False, "error_message": "Gemini-Anfrage Timeout"}
+    except Exception as e:
+        return {"success": False, "error_message": str(e)}
+
+
 @app.get("/api/ideas/{idea_id}", response_model=IdeaResponse)
 async def get_idea(idea_id: str):
     """Get a single idea by ID."""
@@ -843,6 +1031,100 @@ async def gemini_discovery(payload: GeminiDiscoveryRequest):
 
 
 # ============ Scraping Endpoints ============
+
+
+@app.post("/api/sources/scrape-all", response_model=ScrapeAllResponse)
+async def scrape_all_sources():
+    """Scrape all active event sources."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+
+    all_sources = db.get_all_sources(active_only=True, source_type="event")
+    sources = [s for s in all_sources if not (s.get("input_url") or "").startswith("manual://")]
+    existing_hashes = db.get_event_hashes()
+    client = OpenAI(api_key=api_key)
+
+    total_found = 0
+    total_new = 0
+    scraped = 0
+    failed = 0
+
+    for source_data in sources:
+        scraping_mode_str = source_data.get("scraping_mode", "html")
+        try:
+            scraping_mode = ScrapingMode(scraping_mode_str)
+        except ValueError:
+            scraping_mode = ScrapingMode.HTML
+
+        source = Source(
+            id=source_data["id"],
+            name=source_data["name"],
+            input_url=source_data["input_url"],
+            target_url=source_data.get("target_url"),
+            is_active=bool(source_data.get("is_active")),
+            status=SourceStatus(source_data.get("status", "pending")),
+            strategy=source_data.get("strategy", "weekly"),
+            region=source_data.get("region", "hamburg"),
+            source_type=SourceType(source_data.get("source_type") or "event"),
+            scraping_mode=scraping_mode,
+            scraping_hints=source_data.get("scraping_hints"),
+            custom_selectors=None,
+        )
+
+        try:
+            with ScrapingPipeline(client, existing_hashes=existing_hashes) as pipeline:
+                result, events = pipeline.run(source)
+
+            db.update_source(
+                source.id,
+                target_url=source.target_url,
+                status=source.status.value,
+                last_scraped=datetime.utcnow().isoformat(),
+                last_error=result.error_message,
+            )
+
+            for event in events:
+                event_dict = {
+                    "id": event.id,
+                    "source_id": event.source_id,
+                    "title": event.title,
+                    "description": event.description,
+                    "date_start": event.date_start.isoformat(),
+                    "date_end": event.date_end.isoformat() if event.date_end else None,
+                    "location_name": event.location.name,
+                    "location_address": event.location.address,
+                    "location_district": event.location.district,
+                    "location_lat": event.location.lat,
+                    "location_lng": event.location.lng,
+                    "category": event.category.value,
+                    "is_indoor": event.is_indoor,
+                    "age_suitability": event.age_suitability,
+                    "price_info": event.price_info,
+                    "original_link": event.original_link,
+                    "region": event.region,
+                }
+                db.upsert_event(event_dict)
+                if event.id not in existing_hashes:
+                    existing_hashes.append(event.id)
+
+            total_found += result.events_found
+            total_new += result.events_new
+            scraped += 1 if result.success else 0
+            failed += 0 if result.success else 1
+
+        except Exception:
+            failed += 1
+            db.update_source(source.id, status="error")
+
+    return {
+        "success": failed == 0,
+        "sources_total": len(sources),
+        "sources_scraped": scraped,
+        "sources_failed": failed,
+        "total_events_found": total_found,
+        "total_events_new": total_new,
+    }
 
 
 @app.post("/api/sources/{source_id}/scrape", response_model=ScrapeResponse)

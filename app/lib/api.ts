@@ -412,6 +412,37 @@ export const deleteIdea = async (ideaId: string): Promise<void> => {
   await request<{ deleted: boolean }>(`/api/ideas/${ideaId}`, { method: 'DELETE' });
 };
 
+export type IdeaAutofillResult = {
+  success: boolean;
+  title?: string | null;
+  description?: string | null;
+  location_name?: string | null;
+  location_address?: string | null;
+  location_district?: string | null;
+  category?: string | null;
+  is_indoor?: boolean | null;
+  age_suitability?: string | null;
+  price_info?: string | null;
+  duration_minutes?: number | null;
+  original_link?: string | null;
+  error_message?: string | null;
+};
+
+export const autofillIdea = async (params: {
+  name: string;
+  url?: string;
+  region?: string;
+}): Promise<IdeaAutofillResult> => {
+  return request<IdeaAutofillResult>('/api/ideas/autofill', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: params.name,
+      url: params.url || null,
+      region: params.region ?? 'hamburg',
+    }),
+  });
+};
+
 export const fetchSources = async (
   activeOnly = false,
   sourceType?: SourceType
@@ -498,6 +529,17 @@ export const deleteSource = async (sourceId: string): Promise<void> => {
   await request<{ deleted: boolean }>(`/api/sources/${sourceId}`, {
     method: 'DELETE',
   });
+};
+
+export const scrapeAllSources = async () => {
+  return request<{
+    success: boolean;
+    sources_total: number;
+    sources_scraped: number;
+    sources_failed: number;
+    total_events_found: number;
+    total_events_new: number;
+  }>('/api/sources/scrape-all', { method: 'POST' });
 };
 
 export const scrapeSource = async (sourceId: string) => {
