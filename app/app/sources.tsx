@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Pencil, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react-native';
 
 import Colors, { CategoryColors } from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -96,10 +96,17 @@ export default function SourcesScreen() {
     [sources]
   );
 
-  const filteredSources = useMemo(
-    () => sources.filter((s) => !s.inputUrl.startsWith('manual://')),
+  const eventSources = useMemo(
+    () => sources.filter((s) => s.sourceType === 'event' && !s.inputUrl.startsWith('manual://')),
     [sources]
   );
+
+  const ideaSources = useMemo(
+    () => sources.filter((s) => s.sourceType === 'idea' && !s.inputUrl.startsWith('manual://gemini')),
+    [sources]
+  );
+
+  const [ideasExpanded, setIdeasExpanded] = useState(false);
 
   const isIdeaFormValid = useMemo(
     () =>
@@ -440,7 +447,7 @@ export default function SourcesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={filteredSources}
+        data={eventSources}
         keyExtractor={(item) => item.id}
         refreshing={refreshing}
         onRefresh={() => {
@@ -529,63 +536,43 @@ export default function SourcesScreen() {
           <View style={[styles.rowCard, { backgroundColor: colors.card }]}>
             <View style={styles.rowTop}>
               <Text style={[styles.rowTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>{item.name}</Text>
-              <View style={[styles.badge, { backgroundColor: item.sourceType === 'event' ? colors.tint + '20' : CategoryColors.outdoor + '20' }]}>
-                <Text style={[styles.badgeText, { color: item.sourceType === 'event' ? colors.tint : CategoryColors.outdoor, fontFamily: 'Nunito_600SemiBold' }]}>
-                  {item.sourceType === 'event' ? 'Termin' : 'Idee'}
-                </Text>
-              </View>
             </View>
             <Text style={[styles.rowUrl, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={1}>
               {item.inputUrl}
             </Text>
             <Text style={[styles.rowCount, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
-              Eintraege: {item.entriesCount}
-              {item.sourceType === 'event'
-                ? ` (Events: ${item.eventsCount})`
-                : ` (Ideen: ${item.ideasCount})`}
+              Eintraege: {item.entriesCount} (Events: {item.eventsCount})
             </Text>
-            {item.sourceType === 'event' && (
-              <View style={styles.modeRow}>
-                <Text style={[styles.modeText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
-                  {item.scrapingMode === 'vision' ? 'Vision' : 'HTML'}
-                </Text>
-                <View style={styles.modeToggleCompact}>
-                  <Pressable
-                    style={[styles.modeCompactButton, { backgroundColor: item.scrapingMode === 'html' ? colors.tint : colors.backgroundSecondary }]}
-                    onPress={() => void handleSetScrapingMode(item, 'html')}
-                  >
-                    <Text style={[styles.modeCompactText, { fontFamily: 'Nunito_600SemiBold' }]}>HTML</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.modeCompactButton, { backgroundColor: item.scrapingMode === 'vision' ? colors.tint : colors.backgroundSecondary }]}
-                    onPress={() => void handleSetScrapingMode(item, 'vision')}
-                  >
-                    <Text style={[styles.modeCompactText, { fontFamily: 'Nunito_600SemiBold' }]}>Vision</Text>
-                  </Pressable>
-                </View>
+            <View style={styles.modeRow}>
+              <Text style={[styles.modeText, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                {item.scrapingMode === 'vision' ? 'Vision' : 'HTML'}
+              </Text>
+              <View style={styles.modeToggleCompact}>
+                <Pressable
+                  style={[styles.modeCompactButton, { backgroundColor: item.scrapingMode === 'html' ? colors.tint : colors.backgroundSecondary }]}
+                  onPress={() => void handleSetScrapingMode(item, 'html')}
+                >
+                  <Text style={[styles.modeCompactText, { fontFamily: 'Nunito_600SemiBold' }]}>HTML</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.modeCompactButton, { backgroundColor: item.scrapingMode === 'vision' ? colors.tint : colors.backgroundSecondary }]}
+                  onPress={() => void handleSetScrapingMode(item, 'vision')}
+                >
+                  <Text style={[styles.modeCompactText, { fontFamily: 'Nunito_600SemiBold' }]}>Vision</Text>
+                </Pressable>
               </View>
-            )}
+            </View>
             <View style={styles.rowActions}>
-              {item.sourceType === 'event' && (
-                <Pressable
-                  style={[styles.actionButton, { backgroundColor: colors.tint }]}
-                  onPress={() => handleScrape(item)}
-                >
-                  {scrapingSourceId === item.id ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <RefreshCw size={14} color="#FFFFFF" />
-                  )}
-                </Pressable>
-              )}
-              {item.sourceType === 'idea' && (
-                <Pressable
-                  style={[styles.actionButton, { backgroundColor: CategoryColors.outdoor }]}
-                  onPress={() => void handleEditIdea(item)}
-                >
-                  <Pencil size={14} color="#FFFFFF" />
-                </Pressable>
-              )}
+              <Pressable
+                style={[styles.actionButton, { backgroundColor: colors.tint }]}
+                onPress={() => handleScrape(item)}
+              >
+                {scrapingSourceId === item.id ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <RefreshCw size={14} color="#FFFFFF" />
+                )}
+              </Pressable>
               <Pressable style={[styles.actionButton, { backgroundColor: colors.error }]} onPress={() => handleDelete(item)}>
                 <Trash2 size={14} color="#FFFFFF" />
               </Pressable>
@@ -599,7 +586,7 @@ export default function SourcesScreen() {
             ) : (
               <>
                 <Text style={[styles.emptyText, { color: colors.textSecondary, fontFamily: 'Nunito_600SemiBold' }]}>
-                  Keine Quellen vorhanden
+                  Keine Event-Quellen vorhanden
                 </Text>
                 {errorMessage ? (
                   <Text style={[styles.errorText, { color: colors.error, fontFamily: 'Nunito_400Regular' }]}>
@@ -608,6 +595,56 @@ export default function SourcesScreen() {
                 ) : null}
               </>
             )}
+          </View>
+        }
+        ListFooterComponent={
+          <View style={styles.ideasSection}>
+            <Pressable
+              style={[styles.ideaSectionHeader, { backgroundColor: colors.backgroundSecondary }]}
+              onPress={() => setIdeasExpanded(!ideasExpanded)}
+            >
+              <View style={styles.ideaSectionHeaderLeft}>
+                <Text style={[styles.ideaSectionTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>
+                  Ideen-Quellen
+                </Text>
+                <View style={[styles.ideaCountBadge, { backgroundColor: CategoryColors.outdoor + '20' }]}>
+                  <Text style={[styles.ideaCountText, { color: CategoryColors.outdoor, fontFamily: 'Nunito_600SemiBold' }]}>
+                    {ideaSources.length}
+                  </Text>
+                </View>
+              </View>
+              {ideasExpanded ? (
+                <ChevronUp size={20} color={colors.textSecondary} />
+              ) : (
+                <ChevronDown size={20} color={colors.textSecondary} />
+              )}
+            </Pressable>
+            {ideasExpanded && ideaSources.map((item) => (
+              <View key={item.id} style={[styles.rowCard, { backgroundColor: colors.card }]}>
+                <View style={styles.rowTop}>
+                  <Text style={[styles.rowTitle, { color: colors.text, fontFamily: 'Nunito_700Bold' }]}>{item.name}</Text>
+                </View>
+                {item.inputUrl && !item.inputUrl.startsWith('manual://') && (
+                  <Text style={[styles.rowUrl, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]} numberOfLines={1}>
+                    {item.inputUrl}
+                  </Text>
+                )}
+                <Text style={[styles.rowCount, { color: colors.textSecondary, fontFamily: 'Nunito_400Regular' }]}>
+                  Ideen: {item.ideasCount}
+                </Text>
+                <View style={styles.rowActions}>
+                  <Pressable
+                    style={[styles.actionButton, { backgroundColor: CategoryColors.outdoor }]}
+                    onPress={() => void handleEditIdea(item)}
+                  >
+                    <Pencil size={14} color="#FFFFFF" />
+                  </Pressable>
+                  <Pressable style={[styles.actionButton, { backgroundColor: colors.error }]} onPress={() => handleDelete(item)}>
+                    <Trash2 size={14} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
           </View>
         }
       />
@@ -876,4 +913,18 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 70 },
   emptyText: { fontSize: 16 },
   errorText: { marginTop: 6, fontSize: 12 },
+  ideasSection: { marginTop: 16, paddingBottom: 20 },
+  ideaSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  ideaSectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ideaSectionTitle: { fontSize: 15 },
+  ideaCountBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  ideaCountText: { fontSize: 12 },
 });
